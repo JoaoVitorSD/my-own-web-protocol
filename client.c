@@ -11,7 +11,7 @@
 
 void usage(int argc, char **argv) {
 	printf("usage: %s <server IP> <server port>\n", argv[0]);
-	printf("example: %s 127.0.0.1 51511\n", argv[0]);
+	printf("example: %s 40000 50000\n", argv[0]);
 	exit(EXIT_FAILURE);
 }
 

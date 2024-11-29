@@ -1,5 +1,6 @@
 #include "common.h"
 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +13,7 @@
 
 void usage(int argc, char **argv) {
     printf("usage: %s <peer-2-peer port> <connection port>\n", argv[0]);
-    printf("example: %s v4 51511\n", argv[0]);
+    printf("example: %s 40000 50000\n", argv[0]);
     exit(EXIT_FAILURE);
 }
 
@@ -22,10 +23,11 @@ int main(int argc, char **argv) {
     }
 
     struct sockaddr_storage storage;
-    if (0 != server_sockaddr_init(argv[1], argv[2], &storage)) {
+    if (0 != server_sockaddr_init(argv[1], argv[2], &storage))
+    {
         usage(argc, argv);
     }
-
+    int peer_port = atoi(argv[1]);
     int s;
     s = socket(storage.ss_family, SOCK_STREAM, 0);
     if (s == -1) {
