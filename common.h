@@ -3,7 +3,7 @@
 #include <stdlib.h>
 
 #include <arpa/inet.h>
-
+#include "messages.h"
 
 struct sockets_conf
 {

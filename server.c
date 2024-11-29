@@ -81,3 +81,7 @@ int main(int argc, char **argv) {
 
     exit(EXIT_SUCCESS);
 }
+
+int REQ_CONN(){
+    printf("Connection request received\n");
+}
