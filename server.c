@@ -17,41 +17,51 @@ void usage(int argc, char **argv) {
     exit(EXIT_FAILURE);
 }
 
+struct sockaddr *listen_by_storage(char *port, struct sockaddr_storage *storage, int *s)
+{
+    if (0 != server_sockaddr_init(port, storage))
+    {
+        usage(3, &port);
+    }
+    *s = socket(storage->ss_family, SOCK_STREAM, 0);
+    if (*s == -1)
+    {
+        logexit("socket");
+    }
+    int enable = 1;
+    if (0 != setsockopt(*s, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)))
+    {
+        logexit("setsockopt");
+    }
+    struct sockaddr *addr = (struct sockaddr *)(storage);
+    if (0 != bind(*s, addr, sizeof(*storage)))
+    {
+        logexit("bind");
+    }
+    if (0 != listen(*s, 10))
+    {
+        logexit("listen");
+    }
+    return addr;
+}
+
 int main(int argc, char **argv) {
     if (argc < 3) {
         usage(argc, argv);
     }
 
+    struct sockaddr_storage peer_storage;
+    int peer_s;
+    struct sockaddr *peer_addr = listen_by_storage(argv[1], &peer_storage, &peer_s);
     struct sockaddr_storage storage;
-    if (0 != server_sockaddr_init(argv[1], argv[2], &storage))
-    {
-        usage(argc, argv);
-    }
-    int peer_port = atoi(argv[1]);
     int s;
-    s = socket(storage.ss_family, SOCK_STREAM, 0);
-    if (s == -1) {
-        logexit("socket");
-    }
+    struct sockaddr *addr = listen_by_storage(argv[2], &storage, &s);
 
-    int enable = 1;
-    if (0 != setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int))) {
-        logexit("setsockopt");
-    }
 
-    struct sockaddr *addr = (struct sockaddr *)(&storage);
-    if (0 != bind(s, addr, sizeof(storage))) {
-        logexit("bind");
-    }
-
-    if (0 != listen(s, 10)) {
-        logexit("listen");
-    }
 
     char addrstr[BUFSZ];
     addrtostr(addr, addrstr, BUFSZ);
-    printf("bound to %s, waiting connections\n", addrstr);
-
+    printf("bound to %s, waiting client connections\n", addrstr);
     while (1) {
         struct sockaddr_storage cstorage;
         struct sockaddr *caddr = (struct sockaddr *)(&cstorage);
@@ -70,7 +80,7 @@ int main(int argc, char **argv) {
         memset(buf, 0, BUFSZ);
         size_t count = recv(csock, buf, BUFSZ - 1, 0);
         printf("[msg] %s, %d bytes: %s\n", caddrstr, (int)count, buf);
- 
+
         sprintf(buf, "remote endpoint: %.1000s\n", caddrstr);
         count = send(csock, buf, strlen(buf) + 1, 0);
         if (count != strlen(buf) + 1) {
@@ -82,6 +92,3 @@ int main(int argc, char **argv) {
     exit(EXIT_SUCCESS);
 }
 
-int REQ_CONN(){
-    printf("Connection request received\n");
-}
