@@ -17,32 +17,40 @@ void usage(int argc, char **argv) {
     exit(EXIT_FAILURE);
 }
 
-struct sockaddr *listen_by_storage(char *port, struct sockaddr_storage *storage, int *s)
+int listen_by_storage(char *port)
 {
-    if (0 != server_sockaddr_init(port, storage))
+    struct sockaddr_storage storage;
+    if (0 != server_sockaddr_init(port, &storage))
     {
         usage(3, &port);
     }
-    *s = socket(storage->ss_family, SOCK_STREAM, 0);
-    if (*s == -1)
+
+    int s = socket(storage.ss_family, SOCK_STREAM, 0);
+    if (s == -1)
     {
         logexit("socket");
     }
+
     int enable = 1;
-    if (0 != setsockopt(*s, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)))
+    if (0 != setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)))
     {
         logexit("setsockopt");
     }
-    struct sockaddr *addr = (struct sockaddr *)(storage);
-    if (0 != bind(*s, addr, sizeof(*storage)))
+    
+    struct sockaddr *addr = (struct sockaddr *)(&storage);
+    if (0 != bind(s, addr, sizeof(storage)))
     {
         logexit("bind");
     }
-    if (0 != listen(*s, 10))
+    if (0 != listen(s, 10))
     {
         logexit("listen");
     }
-    return addr;
+
+    char addrstr[BUFSZ];
+    addrtostr(addr, addrstr, BUFSZ);
+    printf("bound to %s, waiting client connections\n", addrstr);
+    return s;
 }
 
 int main(int argc, char **argv) {
@@ -50,18 +58,9 @@ int main(int argc, char **argv) {
         usage(argc, argv);
     }
 
-    struct sockaddr_storage peer_storage;
-    int peer_s;
-    struct sockaddr *peer_addr = listen_by_storage(argv[1], &peer_storage, &peer_s);
-    struct sockaddr_storage storage;
-    int s;
-    struct sockaddr *addr = listen_by_storage(argv[2], &storage, &s);
+    int peer_s = listen_by_storage(argv[1]);
+    int s = listen_by_storage(argv[2]);
 
-
-
-    char addrstr[BUFSZ];
-    addrtostr(addr, addrstr, BUFSZ);
-    printf("bound to %s, waiting client connections\n", addrstr);
     while (1) {
         struct sockaddr_storage cstorage;
         struct sockaddr *caddr = (struct sockaddr *)(&cstorage);
