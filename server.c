@@ -36,7 +36,7 @@ int listen_by_storage(char *port)
     {
         logexit("setsockopt");
     }
-    
+
     struct sockaddr *addr = (struct sockaddr *)(&storage);
     if (0 != bind(s, addr, sizeof(storage)))
     {
@@ -53,39 +53,46 @@ int listen_by_storage(char *port)
     return s;
 }
 
+void accept_conncetion(int socket){
+    struct sockaddr_storage cstorage;
+    struct sockaddr *caddr = (struct sockaddr *)(&cstorage);
+    socklen_t caddrlen = sizeof(cstorage);
+
+    int csock = accept(socket, caddr, &caddrlen);
+    if (csock == -1)
+    {
+        logexit("accept");
+    }
+
+    char caddrstr[BUFSZ];
+    addrtostr(caddr, caddrstr, BUFSZ);
+    printf("[log] connection from %s\n", caddrstr);
+
+    char buf[BUFSZ];
+    memset(buf, 0, BUFSZ);
+    size_t count = recv(csock, buf, BUFSZ - 1, 0);
+    printf("[msg] %s, %d bytes: %s\n", caddrstr, (int)count, buf);
+
+    sprintf(buf, "remote endpoint: %.1000s\n", caddrstr);
+    count = send(csock, buf, strlen(buf) + 1, 0);
+    if (count != strlen(buf) + 1)
+    {
+        logexit("send");
+    }
+    close(csock);
+}
+
 int main(int argc, char **argv) {
     if (argc < 3) {
         usage(argc, argv);
     }
 
-    int peer_s = listen_by_storage(argv[1]);
-    int s = listen_by_storage(argv[2]);
+    int peer_socket = listen_by_storage(argv[1]);
+    int client_socket = listen_by_storage(argv[2]);
 
     while (1) {
-        struct sockaddr_storage cstorage;
-        struct sockaddr *caddr = (struct sockaddr *)(&cstorage);
-        socklen_t caddrlen = sizeof(cstorage);
-
-        int csock = accept(s, caddr, &caddrlen);
-        if (csock == -1) {
-            logexit("accept");
-        }
-
-        char caddrstr[BUFSZ];
-        addrtostr(caddr, caddrstr, BUFSZ);
-        printf("[log] connection from %s\n", caddrstr);
-
-        char buf[BUFSZ];
-        memset(buf, 0, BUFSZ);
-        size_t count = recv(csock, buf, BUFSZ - 1, 0);
-        printf("[msg] %s, %d bytes: %s\n", caddrstr, (int)count, buf);
-
-        sprintf(buf, "remote endpoint: %.1000s\n", caddrstr);
-        count = send(csock, buf, strlen(buf) + 1, 0);
-        if (count != strlen(buf) + 1) {
-            logexit("send");
-        }
-        close(csock);
+        accept_conncetion(peer_socket);
+        accept_conncetion(client_socket);
     }
 
     exit(EXIT_SUCCESS);
