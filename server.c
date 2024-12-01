@@ -29,7 +29,7 @@ int listen_and_return_socket(char *port, struct sockaddr_storage *storage)
     }
 
     int enable = 1;
-    if (0 != setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)))
+    if (0 != setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) + setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(int)))
     {
         logexit("setsockopt");
     }
@@ -74,6 +74,16 @@ int accept_conncetion(int socket, char *caddrstr, char * buffer)
   
 }
 
+void handle_peer_req(int socket, char *buffer)
+{
+    if (socket == -1)
+    {
+        printf("Error accepting connection\n");
+        return;
+    }
+    send_req(socket, buffer);
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 3) {
@@ -98,12 +108,3 @@ int main(int argc, char **argv)
     exit(EXIT_SUCCESS);
 }
 
-void handle_peer_req(int socket, char *buffer)
-{
-    if (socket == -1)
-    {
-        printf("Error accepting connection\n");
-        return;
-    }
-    send_req(socket, buffer);
-}
