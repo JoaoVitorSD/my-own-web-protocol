@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include "constants.h"
 #include <arpa/inet.h>
 
 void logexit(const char *msg) {
@@ -98,4 +98,16 @@ int server_sockaddr_init(const char *socket,
     // } else {
     //     return -1;
     // }
+}
+
+void send_req(int socket,  char * message)
+{
+    sprintf(message, "status code 200 ok");
+    size_t count = send(socket, message, strlen(message) + 1, 0);
+    if (count != strlen(message) + 1)
+    {
+        printf("Error sending request\n");
+        logexit("send");
+    }
+    close(socket);
 }

@@ -22,3 +22,7 @@
 // Confirmation & Error Messages
 #define ERROR 255
 #define OK 0
+
+// Params
+
+#define BUFSZ 1024

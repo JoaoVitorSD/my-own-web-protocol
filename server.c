@@ -9,23 +9,20 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#define BUFSZ 1024
-
-void usage(int argc, char **argv) {
+void usage(int argc, char **argv)
+{
     printf("usage: %s <peer-2-peer port> <connection port>\n", argv[0]);
     printf("example: %s 40000 50000\n", argv[0]);
     exit(EXIT_FAILURE);
 }
 
-int listen_by_storage(char *port)
+int listen_and_return_socket(char *port, struct sockaddr_storage *storage)
 {
-    struct sockaddr_storage storage;
-    if (0 != server_sockaddr_init(port, &storage))
+    if (0 != server_sockaddr_init(port, storage))
     {
         usage(3, &port);
     }
-
-    int s = socket(storage.ss_family, SOCK_STREAM, 0);
+    int s = socket(storage->ss_family, SOCK_STREAM, 0);
     if (s == -1)
     {
         logexit("socket");
@@ -37,8 +34,8 @@ int listen_by_storage(char *port)
         logexit("setsockopt");
     }
 
-    struct sockaddr *addr = (struct sockaddr *)(&storage);
-    if (0 != bind(s, addr, sizeof(storage)))
+    struct sockaddr *addr = (struct sockaddr *)(storage);
+    if (0 != bind(s, addr, sizeof(*storage)))
     {
         logexit("bind");
     }
@@ -53,7 +50,8 @@ int listen_by_storage(char *port)
     return s;
 }
 
-void accept_conncetion(int socket){
+int accept_conncetion(int socket, char *caddrstr, char * buffer)
+{
     struct sockaddr_storage cstorage;
     struct sockaddr *caddr = (struct sockaddr *)(&cstorage);
     socklen_t caddrlen = sizeof(cstorage);
@@ -62,39 +60,50 @@ void accept_conncetion(int socket){
     if (csock == -1)
     {
         logexit("accept");
+        return -1;
     }
-
-    char caddrstr[BUFSZ];
     addrtostr(caddr, caddrstr, BUFSZ);
     printf("[log] connection from %s\n", caddrstr);
-
     char buf[BUFSZ];
+
     memset(buf, 0, BUFSZ);
     size_t count = recv(csock, buf, BUFSZ - 1, 0);
     printf("[msg] %s, %d bytes: %s\n", caddrstr, (int)count, buf);
-
-    sprintf(buf, "remote endpoint: %.1000s\n", caddrstr);
-    count = send(csock, buf, strlen(buf) + 1, 0);
-    if (count != strlen(buf) + 1)
-    {
-        logexit("send");
-    }
-    close(csock);
+    strcpy(buffer, buf);
+    return csock;
+  
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     if (argc < 3) {
         usage(argc, argv);
     }
+    struct sockaddr_storage peer_storage;
+    struct sockaddr_storage client_storage;
+    int peer_socket = listen_and_return_socket(argv[1], &peer_storage);
+    int client_socket = listen_and_return_socket(argv[2], &client_storage);
 
-    int peer_socket = listen_by_storage(argv[1]);
-    int client_socket = listen_by_storage(argv[2]);
-
+    // send_req(peer_socket, REQ_CONNPEER);
     while (1) {
-        accept_conncetion(peer_socket);
-        accept_conncetion(client_socket);
+        char peer_addrstr[BUFSZ];
+        char peer_buffer[BUFSZ];
+        int peerSock = accept_conncetion(peer_socket, peer_addrstr,peer_buffer);
+        handle_peer_req(peerSock, peer_buffer);
+        char client_addrstr[BUFSZ];
+        char client_request[BUFSZ];
+        accept_conncetion(client_socket, client_addrstr,client_request);
     }
 
     exit(EXIT_SUCCESS);
 }
 
+void handle_peer_req(int socket, char *buffer)
+{
+    if (socket == -1)
+    {
+        printf("Error accepting connection\n");
+        return;
+    }
+    send_req(socket, buffer);
+}
