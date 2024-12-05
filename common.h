@@ -23,4 +23,6 @@ void addrtostr(const struct sockaddr *addr, char *str, size_t strsize);
 int server_sockaddr_init(const char *portstr,
                          struct sockaddr_storage *storage);
 
-void send_req(int socket, const char *buffer);
+char * request(int socket, int req_action, const char *buffer);
+
+void response(int socket, int res_action, int response);

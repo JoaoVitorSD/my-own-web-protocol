@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
+#include "server.h"
 #include <sys/socket.h>
 #include <sys/types.h>
 
@@ -29,7 +29,7 @@ int listen_and_return_socket(char *port, struct sockaddr_storage *storage)
     }
 
     int enable = 1;
-    if (0 != setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) + setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(int)))
+    if (0 != setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)))
     {
         logexit("setsockopt");
     }
@@ -74,14 +74,30 @@ int accept_conncetion(int socket, char *caddrstr, char * buffer)
   
 }
 
-void handle_peer_req(int socket, char *buffer)
+
+int try_connect_peer(char *peerPort,server_t * server)
 {
-    if (socket == -1)
+    struct sockaddr_storage *storage;
+    if (0 != addrparse("127.0.0.1", peerPort, storage))
     {
-        printf("Error accepting connection\n");
-        return;
+        usage(3, &peerPort);
     }
-    send_req(socket, buffer);
+    server->peer_storage = *storage;
+    int s = socket(storage->ss_family, SOCK_STREAM, 0);
+    if (s == -1)
+    {
+        logexit("socket");
+    }
+    struct sockaddr *addr = (struct sockaddr *)(storage);
+    if (0 != connect(s, addr, sizeof(*storage)))
+    {
+        printf("No peer found, starting to listen...\n");
+        server->current_peer = 0;
+        return listen_and_return_socket(peerPort, storage);
+    }
+    request_empty(s, REQ_CONNPEER);
+    printf("connected to peer\n");
+    return s;
 }
 
 int main(int argc, char **argv)
@@ -89,22 +105,42 @@ int main(int argc, char **argv)
     if (argc < 3) {
         usage(argc, argv);
     }
-    struct sockaddr_storage peer_storage;
-    struct sockaddr_storage client_storage;
-    int peer_socket = listen_and_return_socket(argv[1], &peer_storage);
-    int client_socket = listen_and_return_socket(argv[2], &client_storage);
 
-    // send_req(peer_socket, REQ_CONNPEER);
+    server_t server;
+    int peer_socket = try_connect_peer(argv[1], &server);
+    
+    // struct sockaddr_storage client_storage;
+    // int client_socket = listen_and_return_socket(argv[2], &client_storage);
+
+    // request(peer_socket, REQ_CONNPEER);
     while (1) {
         char peer_addrstr[BUFSZ];
         char peer_buffer[BUFSZ];
         int peerSock = accept_conncetion(peer_socket, peer_addrstr,peer_buffer);
         handle_peer_req(peerSock, peer_buffer);
-        char client_addrstr[BUFSZ];
-        char client_request[BUFSZ];
-        accept_conncetion(client_socket, client_addrstr,client_request);
+        // char client_addrstr[BUFSZ];
+        // char client_request[BUFSZ];
+        // accept_conncetion(client_socket, client_addrstr,client_request);
     }
 
     exit(EXIT_SUCCESS);
 }
 
+void handle_peer_req(int client_sock, char *clientInfo)
+{
+    if (client_sock == -1)
+    {
+        printf("Error accepting connection\n");
+        return;
+    }
+    int action;
+    char *payload;
+    sscanf(clientInfo, "%d %s", &action, payload);
+    if (action == REQ_CONNPEER)
+    {
+        // Request new socket to peer
+        int new_socket = socket(AF_INET, SOCK_STREAM, 0);
+        response(client_sock, 1, clientInfo);
+    }
+    // request(client_sock, 1, clientInfo);
+}

@@ -100,13 +100,25 @@ int server_sockaddr_init(const char *socket,
     // }
 }
 
-void send_req(int socket,  char * message)
+char * request(int socket, int response, char * payload)
 {
-    sprintf(message, "status code 200 ok");
-    size_t count = send(socket, message, strlen(message) + 1, 0);
-    if (count != strlen(message) + 1)
+    char response_str[BUFSZ];
+    sprintf(response_str, "%d %s", response, payload);
+    size_t count = send(socket, response_str, strlen(response_str) + 1, 0);
+    if (count != strlen(response_str) + 1)
     {
         printf("Error sending request\n");
+        logexit("send");
+    }
+}
+void response(int socket, int response, int response_code)
+{
+    char response_str[BUFSZ];
+    sprintf(response_str, "%d %d", response, response_code);
+    size_t count = send(socket, response_str, strlen(response_str) + 1, 0);
+    if (count != strlen(response_str) + 1)
+    {
+        printf("Error sending response\n");
         logexit("send");
     }
     close(socket);
