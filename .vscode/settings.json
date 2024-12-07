@@ -8,6 +8,8 @@
     "messages.h": "c",
     "constants.h": "c",
     "socket.h": "c",
-    "stdio.h": "c"
+    "stdio.h": "c",
+    "string.h": "c",
+    "inttypes.h": "c"
   }
 }

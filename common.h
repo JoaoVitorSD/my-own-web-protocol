@@ -6,11 +6,6 @@
 #include "constants.h"
 
 
-struct sockets_conf
-{
-    uint16_t peer_port;
-    uint16_t conn_port;
-};
 
 
 void logexit(const char *msg);
@@ -23,6 +18,7 @@ void addrtostr(const struct sockaddr *addr, char *str, size_t strsize);
 int server_sockaddr_init(const char *portstr,
                          struct sockaddr_storage *storage);
 
-char * request(int socket, int req_action, const char *buffer);
+struct response_t request(int socket, int req_action, const char *buffer);
 
-void response(int socket, int res_action, int response);
+void return_response(int socket, int req_action, const char *payload);
+char * itoa(int value);

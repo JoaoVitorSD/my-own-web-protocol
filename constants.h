@@ -26,3 +26,15 @@
 // Params
 
 #define BUFSZ 1024
+
+struct sockets_conf
+{
+    uint16_t peer_port;
+    uint16_t conn_port;
+};
+
+struct response_t
+{
+    int action;
+    char *payload;
+};
