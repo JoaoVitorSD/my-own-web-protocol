@@ -19,9 +19,25 @@
 #define REQ_USRAUTH 42
 #define RES_USRAUTH 43
 
+
+// Success codes & Messages
+#define OK 0
+#define SUCCESSFUL_DISCONNECTED "01"
+#define SUCCESSFUL_CREATE "02"
+#define SUCCESSFUL_UPDATE "03"
 // Confirmation & Error Messages
 #define ERROR 255
-#define OK 0
+
+
+#define ERROR_PEER_LIMIT_EXCEEDED "01"
+#define ERROR_PEER_NOT_FOUND "02"
+#define ERROR_CLIENT_LIMIT_EXCEEDED "09"
+#define ERROR_CLIENT_NOT_FOUND "10"
+#define ERROR_USER_LIMIT_EXCEEDED "17"
+#define ERROR_USER_NOT_FOUND "18"
+#define ERROR_PERMISSION_DENIED "19"
+
+
 
 // Params
 

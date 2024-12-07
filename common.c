@@ -4,6 +4,8 @@
 #include <string.h>
 #include "constants.h"
 #include <arpa/inet.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 void logexit(const char *msg)
 {
@@ -88,14 +90,9 @@ void addrtostr(const struct sockaddr *addr, char *str, size_t strsize)
     }
 }
 
-int server_sockaddr_init(const char *socket,
+int server_sockaddr_init(uint16_t port,
                          struct sockaddr_storage *storage)
 {
-    uint16_t port = (uint16_t)atoi(socket); // unsigned short
-    if (port == 0)
-    {
-        return -1;
-    }
     port = htons(port); // host to network short
     memset(storage, 0, sizeof(*storage));
 
@@ -121,11 +118,9 @@ struct response_t request(int socket, int action, char *payload)
     char buffer[BUFSZ];
     sprintf(buffer, "%d %s", action, payload);
 
-    printf("Sending request: %s\n", buffer);
     size_t count = send(socket, buffer, strlen(buffer) + 1, 0);
     if (count != strlen(buffer) + 1)
     {
-        printf("Error sending request\n");
         logexit("send");
     }
 
@@ -144,8 +139,28 @@ struct response_t request(int socket, int action, char *payload)
     int action_response;
     char *payload_response = malloc(BUFSZ);
     sscanf(buffer, "%d %s", &action_response, payload_response);
+    printf("Received response: %d %s\n", action_response, payload_response);
     return (struct response_t){action_response, payload_response};
 }
+
+struct response_t request_in_port(int port, int action, char *payload){
+    struct sockaddr_storage storage;
+    if (0 != server_sockaddr_init(port, &storage))
+    {
+        logexit("server_sockaddr_init");
+    }
+    int s = socket(storage.ss_family, SOCK_STREAM, 0);
+    if (s == -1)
+    {
+        logexit("socket");
+    }
+    if (0 != connect(s, (struct sockaddr *)(&storage), sizeof(storage)))
+    {
+        logexit("connect");
+    }
+    const struct response_t response = request(s, action, payload);
+    return response;
+};
 
 char *itoa(int value)
 {
@@ -153,6 +168,7 @@ char *itoa(int value)
     sprintf(result, "%d", value);
     return result;
 }
+
 
 void return_response(int socket, int action, char *payload)
 {
@@ -166,4 +182,37 @@ void return_response(int socket, int action, char *payload)
         printf("Error sending response\n");
         logexit("send");
     }
+    close(socket);
+}
+
+// 01 : ”Peer limit exceeded” 02 : ”Peer not found” 09 : ”Client limit exceeded” 10 : “Client not found” 17 : “User limit exceeded” 18 : “User not found” 19 : “Permission denied”
+
+
+void handle_error(char *message)
+{
+    if (0 == strcmp(message, ERROR_PEER_LIMIT_EXCEEDED))
+    {
+        printf("Error: Peer limit exceeded\n");
+        exit(EXIT_FAILURE);
+    }
+    else if (0 == strcmp(message, ERROR_PEER_NOT_FOUND))
+        printf("Error: Peer not found\n");
+    else if (0 == strcmp(message, ERROR_CLIENT_LIMIT_EXCEEDED))
+        printf("Error: Client limit exceeded\n");
+    else if (0 == strcmp(message, ERROR_CLIENT_NOT_FOUND))
+        printf("Error: Client not found\n");
+    else if (0 == strcmp(message, ERROR_USER_LIMIT_EXCEEDED))
+        printf("Error: User limit exceeded\n");
+    else if (0 == strcmp(message, ERROR_USER_NOT_FOUND))
+        printf("Error: User not found\n");
+    else if (0 == strcmp(message, ERROR_PERMISSION_DENIED))
+        printf("Error: Permission denied\n");
+    else
+        printf("Error: Unknown error %s\n", message);
+}
+
+
+int gen_peer_port()
+{
+    return 40000 + rand() % 10000;
 }

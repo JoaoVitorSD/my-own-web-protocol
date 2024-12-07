@@ -46,6 +46,11 @@ int main(int argc, char **argv) {
 	memset(buf, 0, BUFSZ);
 	printf("mensagem> ");
 	fgets(buf, BUFSZ-1, stdin);
+	size_t len = strlen(buf);
+	if (len > 0 && buf[len - 1] == '\n')
+	{
+		buf[len - 1] = '\0';
+	}
 	size_t count = send(s, buf, strlen(buf)+1, 0);
 	if (count != strlen(buf)+1) {
 		logexit("send");
