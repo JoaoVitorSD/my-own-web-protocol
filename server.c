@@ -96,7 +96,7 @@ void init_peer_connection(char *peerPort, server_t *server)
     if (0 != connect(s, addr, sizeof(storage)))
     {
         printf("No peer found, starting to listen...\n");
-        server->initial_peer = 1;
+        server->is_user_location_server = 1;
         server->peer_id = init_server(peerPort, &storage);
         return;
     }
@@ -110,18 +110,13 @@ void init_peer_connection(char *peerPort, server_t *server)
     }
     server->peer_id = init_server(response.payload, &storage);
     server->peer_pair_id = s;
-    server->initial_peer = 0;
+    server->is_user_storage_server = 1;
     printf("Peer %s connected\n", response.payload);
 
 }
 
 void handle_peer_req(server_t *server, int client_sock, char *clientInfo)
 {
-    if (client_sock == -1)
-    {
-        printf("Error accepting connection\n");
-        return;
-    }
     int action;
     char payload[BUFSZ];
     sscanf(clientInfo, "%d %s", &action, payload);
@@ -167,15 +162,10 @@ user * NewUserFromPayload(char * payload){
     return newUser;
 }
 
-void handle_client_req(server_t *server, int client_sock, char *clientInfo)
+void handle_client_storage_req(server_t *server, int client_sock, char *clientInfo)
 {
-    if (client_sock == -1)
-    {
-        printf("Error accepting connection\n");
-        return;
-    }
     int action;
-    char *payload;
+    char payload[BUFSZ];
     sscanf(clientInfo, "%d %s", &action, payload);
     if (action == REQ_USRADD)
     {
@@ -193,15 +183,50 @@ void handle_client_req(server_t *server, int client_sock, char *clientInfo)
             printf("User %s root: %d\n", server->users[i]->id, server->users[i]->root);
         }
     }
+
     return_response(client_sock, ERROR, clientInfo);
 }
 
-server_t * NewServer(){
+void handle_client_location_req(server_t *server, int client_sock, char *clientInfo)
+{
+    int action;
+    char payload[BUFSZ];
+    sscanf(clientInfo, "%d %s", &action, payload);
+    // if (action == REQ_USRLOC)
+    // {
+    //     user *newUser = NewUserFromPayload(payload);
+    //     server->users[server->user_count] = newUser;
+    //     server->user_count++;
+    //     printf("Adding new user %s\n", newUser->id);
+    //     return_response(client_sock, OK, SUCCESSFUL_CREATE);
+    //     return;
+    // }
+    // if (action == PRINTUSERS)
+    // {
+    //     for (int i = 0; i < server->user_count; i++)
+    //     {
+    //         printf("User %s root: %d\n", server->users[i]->id, server->users[i]->root);
+    //     }
+    // }
+
+    return_response(client_sock, ERROR, ERROR_USER_NOT_FOUND);
+}
+
+void handle_client_req (server_t *server, int client_sock, char *clientInfo){
+    if (server->is_user_storage_server){
+        handle_client_storage_req(server, client_sock, clientInfo);
+    }
+    if (server->is_user_location_server){
+        handle_client_location_req(server, client_sock, clientInfo);
+    }
+} 
+server_t *NewServer(){
     server_t *server;
     server = malloc(sizeof(server_t));
     server->peer_id = -1;
     server->peer_pair_id = -1;
-    server->initial_peer = 1;
+    server->is_user_location_server = 0;
+    server->is_user_storage_server = 0;
     server->users = malloc(sizeof(user) * 10);
     server->user_locations = malloc(sizeof(user_location) * 10);
     server->user_count = 0;

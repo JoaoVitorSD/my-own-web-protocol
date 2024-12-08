@@ -15,7 +15,8 @@ typedef struct{
 } user_location;
 
 typedef struct {
-    int initial_peer;
+    int is_user_storage_server;
+    int is_user_location_server;
     int peer_id;
     int peer_sock;
     int peer_pair_id;
