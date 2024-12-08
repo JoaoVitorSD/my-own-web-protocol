@@ -6,6 +6,9 @@
 #define RES_CONN 21
 #define REQ_DISC 22
 
+// DEBUG
+
+#define PRINTUSERS 1000
 // Data Messages
 #define REQ_USRADD 33
 #define REQ_USRACCESS 34

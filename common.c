@@ -96,21 +96,11 @@ int server_sockaddr_init(uint16_t port,
     port = htons(port); // host to network short
     memset(storage, 0, sizeof(*storage));
 
-    // if (0 == strcmp(proto, "v4")) {
-    struct sockaddr_in *addr4 = (struct sockaddr_in *)storage;
-    addr4->sin_family = AF_INET;
-    addr4->sin_addr.s_addr = INADDR_ANY;
-    addr4->sin_port = port;
+    struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)storage;
+    addr6->sin6_family = AF_INET6;
+    addr6->sin6_addr = in6addr_any;
+    addr6->sin6_port = port;
     return 0;
-    // } else if (0 == strcmp(proto, "v6")) {
-    //     struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)storage;
-    //     addr6->sin6_family = AF_INET6;
-    //     addr6->sin6_addr = in6addr_any;
-    //     addr6->sin6_port = port;
-    //     return 0;
-    // } else {
-    //     return -1;
-    // }
 }
 
 struct response_t request(int socket, int action, char *payload)
@@ -143,7 +133,8 @@ struct response_t request(int socket, int action, char *payload)
     return (struct response_t){action_response, payload_response};
 }
 
-struct response_t request_in_port(int port, int action, char *payload){
+struct response_t request_in_port(int port, int action, char *payload)
+{
     struct sockaddr_storage storage;
     if (0 != server_sockaddr_init(port, &storage))
     {
@@ -169,7 +160,6 @@ char *itoa(int value)
     return result;
 }
 
-
 void return_response(int socket, int action, char *payload)
 {
     char buffer[BUFSZ];
@@ -186,7 +176,6 @@ void return_response(int socket, int action, char *payload)
 }
 
 // 01 : ”Peer limit exceeded” 02 : ”Peer not found” 09 : ”Client limit exceeded” 10 : “Client not found” 17 : “User limit exceeded” 18 : “User not found” 19 : “Permission denied”
-
 
 void handle_error(char *message)
 {
@@ -210,7 +199,6 @@ void handle_error(char *message)
     else
         printf("Error: Unknown error %s\n", message);
 }
-
 
 int gen_peer_port()
 {

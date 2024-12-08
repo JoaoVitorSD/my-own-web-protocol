@@ -22,7 +22,11 @@ void listen_to_socket(int socket, struct sockaddr_storage *storage)
     {
         logexit("setsockopt");
     }
-
+    int enable_ipv4 = 0;
+    if (0 != setsockopt(socket, IPPROTO_IPV6, IPV6_V6ONLY, &enable_ipv4, sizeof(int)))
+    {
+        logexit("setsockopt");
+    }
     struct sockaddr *addr = (struct sockaddr *)(storage);
     if (0 != bind(socket, addr, sizeof(*storage)))
     {
@@ -107,10 +111,8 @@ void init_peer_connection(char *peerPort, server_t *server)
     server->peer_id = init_server(response.payload, &storage);
     server->peer_pair_id = s;
     server->initial_peer = 0;
+    printf("Peer %s connected\n", response.payload);
 
-    char peer_port_request[BUFSIZ];
-    sprintf(peer_port_request, "%d", server->peer_id);
-    request_in_port(40000, REQ_DISCPEER, "49383");
 }
 
 void handle_peer_req(server_t *server, int client_sock, char *clientInfo)
@@ -158,6 +160,13 @@ void handle_peer_req(server_t *server, int client_sock, char *clientInfo)
     return_response(client_sock, ERROR, clientInfo);
 }
 
+user * NewUserFromPayload(char * payload){
+    user *newUser;
+    newUser = malloc(sizeof(user));
+    sscanf(payload, "%s %d", newUser->id, &newUser->root);
+    return newUser;
+}
+
 void handle_client_req(server_t *server, int client_sock, char *clientInfo)
 {
     if (client_sock == -1)
@@ -168,23 +177,37 @@ void handle_client_req(server_t *server, int client_sock, char *clientInfo)
     int action;
     char *payload;
     sscanf(clientInfo, "%d %s", &action, payload);
-    if (action == REQ_CONNPEER)
+    if (action == REQ_USRADD)
     {
-        // Request new socket to peer
-        if (server->peer_pair_id != -1)
-        {
-            return_response(client_sock, ERROR, "01");
-            return;
-        }
-        // TODO asign socket instead of port
-        int peer_port = gen_peer_port();
-        server->peer_pair_id = peer_port;
-        printf("Peer connected\n");
-        return_response(client_sock, RES_CONNPEER, itoa(peer_port));
+        user *newUser = NewUserFromPayload(payload);
+        server->users[server->user_count] = newUser;
+        server->user_count++;
+        printf("Adding new user %s\n", newUser->id);
+        return_response(client_sock, OK, SUCCESSFUL_CREATE);
         return;
+    }
+    if (action == PRINTUSERS)
+    {
+        for (int i = 0; i < server->user_count; i++)
+        {
+            printf("User %s root: %d\n", server->users[i]->id, server->users[i]->root);
+        }
     }
     return_response(client_sock, ERROR, clientInfo);
 }
+
+server_t * NewServer(){
+    server_t *server;
+    server = malloc(sizeof(server_t));
+    server->peer_id = -1;
+    server->peer_pair_id = -1;
+    server->initial_peer = 1;
+    server->users = malloc(sizeof(user) * 10);
+    server->user_locations = malloc(sizeof(user_location) * 10);
+    server->user_count = 0;
+    return server;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 3)
@@ -192,11 +215,8 @@ int main(int argc, char **argv)
         usage(argc, argv);
     }
 
-    server_t *server;
-    server = malloc(sizeof(server_t));
-    server->peer_id = -1;
-    server->peer_pair_id = -1;
-    server->initial_peer = 1;
+  
+    server_t *server = NewServer();
     init_peer_connection(argv[1], server);
 
     struct sockaddr_storage client_storage;
