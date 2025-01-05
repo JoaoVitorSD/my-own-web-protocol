@@ -128,9 +128,22 @@ struct response_t client_request_to_server(int socket, int action, char *payload
     return parse_response(buffer);
 }
 
+/**
+ * Example input: "33 1 1"
+ * - 33: Represents the action code.
+ * - 1: Represents the user ID.
+ * - 1: Indicates if the user is a root user.
+ *
+ * The input "33 1 1" would be parsed as:
+ * - Action: 33
+ * - Payload: "1 1"
+ */
+int parse_payload(char *raw, int *action, char *payload)
+{
+ return sscanf(raw, "%d %[^\n]", action, payload);
+}
 
-
-char *itoa(int value)
+char *integer_to_string(int value)
 {
     char *result = malloc(12);
     sprintf(result, "%d", value);
@@ -177,10 +190,10 @@ void handle_error(char *message)
 
 int gen_peer_id()
 {
-    return 1+ rand() % 100000;
+    return 1 + rand() % 100000;
 }
 
 int gen_client_id()
 {
-    return  rand() % 100000;
+    return rand() % 100000;
 }

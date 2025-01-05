@@ -13,7 +13,6 @@ typedef struct
 typedef struct
 {
     char id[10];
-    int location;
 } user_location;
 
 typedef struct
@@ -30,6 +29,7 @@ typedef struct
     int client_connections[10];
     int client_connections_count;
     int client_sockets[10];
+    int active_mode;
 } server_t;
 
 #endif

@@ -88,9 +88,8 @@ int init_server(char *port, struct sockaddr_storage *storage)
     return s;
 }
 
-int accept_conncetion(int socket, char *caddrstr, char *buffer)
+int accept_conncetion(int socket, char *buffer)
 {
-    printf("Accepting connection\n");
     struct sockaddr_storage cstorage;
     struct sockaddr *caddr = (struct sockaddr *)(&cstorage);
     socklen_t caddrlen = sizeof(cstorage);
@@ -101,12 +100,11 @@ int accept_conncetion(int socket, char *caddrstr, char *buffer)
         logexit("accept");
         return -1;
     }
-    addrtostr(caddr, caddrstr, BUFSZ);
-    size_t count = recv(csock, buffer, BUFSZ - 1, 0);
+    recv(csock, buffer, BUFSZ - 1, 0);
     return csock;
 }
 
-void init_peer_connection(char *peerPort, server_t *server)
+void init_peer_connection_and_setup_server_conf(char *peerPort, server_t *server)
 {
     struct sockaddr_storage storage;
     if (0 != addrparse("127.0.0.1", peerPort, &storage))
@@ -125,6 +123,7 @@ void init_peer_connection(char *peerPort, server_t *server)
         printf("No peer found, starting to listen...\n");
         server->peer_mode = PEER_MODE_USER_STORAGE;
         server->server_sock = init_server(peerPort, &storage);
+        server->active_mode = 1;
         return;
     }
     struct response_t response = peer_request(s, REQ_CONNPEER, "");
@@ -140,8 +139,9 @@ void init_peer_connection(char *peerPort, server_t *server)
     printf("New Peer ID: %d\n", server->peer_id);
     server->peer_id = gen_peer_id();
     printf("Peer %d connected\n", server->peer_id);
-    peer_response(s, RES_CONNPEER, itoa(server->peer_id));
+    peer_response(s, RES_CONNPEER, integer_to_string(server->peer_id));
     server->peer_mode = PEER_MODE_USER_LOCATIONS;
+    server->active_mode = 0;
 }
 
 void handle_peer_req(server_t *server, int peer_sock, char *clientInfo)
@@ -161,8 +161,9 @@ void handle_peer_req(server_t *server, int peer_sock, char *clientInfo)
         // TODO asign socket instead of port
         int peer_id = gen_peer_id();
         server->peer_id = peer_id;
+        server->peer_sock = peer_sock;
         printf("Peer %d connected\n", peer_id);
-        struct response_t response = peer_request(peer_sock, RES_CONNPEER, itoa(peer_id));
+        struct response_t response = peer_request(peer_sock, RES_CONNPEER, integer_to_string(peer_id));
         return;
     }
     if (action == REQ_DISCPEER)
@@ -181,7 +182,7 @@ void handle_peer_req(server_t *server, int peer_sock, char *clientInfo)
         printf("Peer %d disconnected\n", peer_sock);
         return;
     }
-
+  
     return_response(peer_sock, ERROR, clientInfo);
 }
 
@@ -229,13 +230,40 @@ void *new_client_requests_handler_thread(void *arg)
             pthread_exit(NULL);
         }
 
-        handle_client_req(data->server, data->client_sock, buffer);
+        handle_client_req(data->server, data->client_sock, buffer,data->client_id);
     }
 
     return NULL;
 }
 
-void handle_client_storage_req(server_t *server, int client_sock, int action, char *payload)
+void persist_user_location_in_location_peer(server_t * server, user * user, int loc_id)
+{
+    char payload[BUFSZ];
+    sprintf(payload, "%s %d", user->id, loc_id);
+    peer_request(server->peer_sock, REQ_LOCREG, payload);
+}
+
+void handle_peer_server_storage_req (server_t * server, char* rawPayload){
+
+    int action;
+    char payload[BUFSZ];
+    parse_payload(rawPayload, &action, payload);
+    switch (action)
+    {
+        case REQ_LOCREG:
+        {
+            printf("REQ_LOCREG %s\n", payload);
+            user_location *newUserLocation;
+            newUserLocation = malloc(sizeof(user_location));
+            int loc_id;
+            sscanf(payload, "%s %d", newUserLocation->id, &loc_id);
+            server->user_locations[loc_id-1] = newUserLocation;
+            peer_response(server->peer_sock, RES_LOCREG, integer_to_string(loc_id));
+            return;
+        }
+    }
+}
+void handle_client_storage_req(server_t *server, int client_sock, int action, char *payload, int client_id)
 {
 
     if (action == REQ_USRADD)
@@ -246,6 +274,7 @@ void handle_client_storage_req(server_t *server, int client_sock, int action, ch
         if (existingUser != NULL)
         {
             existingUser->root = newUser->root;
+            peer_request(server->peer_sock, REQ_USRADD, payload);
             return_response(client_sock, OK, SUCCESSFUL_UPDATE);
             return;
         }
@@ -254,6 +283,7 @@ void handle_client_storage_req(server_t *server, int client_sock, int action, ch
             return_response(client_sock, ERROR, ERROR_USER_LIMIT_EXCEEDED);
             return;
         }
+        persist_user_location_in_location_peer(server, newUser, client_id);
         server->users[server->user_count] = newUser;
         server->user_count++;
         return_response(client_sock, OK, SUCCESSFUL_CREATE);
@@ -271,8 +301,19 @@ void handle_client_storage_req(server_t *server, int client_sock, int action, ch
     return_response(client_sock, ERROR, "Invalid action");
 }
 
-void handle_client_location_req(server_t *server, int client_sock, int action, char *payload)
+void handle_client_location_req(server_t *server, int client_sock, int action, char *payload, int client_id)
 {
+
+    switch(action)
+    {
+    case REQ_USRLOC:
+        printf("REQ_USRLOC %s\n", payload);
+        return;
+        /* code */
+        break;
+    default:
+        break;
+    }
 
     // if (action == REQ_USRLOC)
     // {
@@ -293,8 +334,26 @@ void handle_client_location_req(server_t *server, int client_sock, int action, c
 
     return_response(client_sock, ERROR, ERROR_USER_NOT_FOUND);
 }
+void handle_client_req(server_t *server, int client_sock, char *request, int client_id)
+{
+    int action;
+    char payload[BUFSZ];
+    parse_payload(request, &action, payload);
+    switch (server->peer_mode)
+    {
+    case PEER_MODE_USER_STORAGE:
+        handle_client_storage_req(server, client_sock, action, payload, client_id);
+        break;
+    case PEER_MODE_USER_LOCATIONS:
+        handle_client_location_req(server, client_sock, action, payload,client_id);
+        break;
+    default:
+        fprintf(stderr, "Invalid peer mode\n");
+        break;
+    }
+}
 
-void handle_client_req(server_t *server, int client_sock, char *request)
+void handle_inital_client_req(server_t *server, int client_sock, char *request)
 {
     int action;
     char payload[BUFSZ];
@@ -308,7 +367,7 @@ void handle_client_req(server_t *server, int client_sock, char *request)
      * - Action: 33
      * - Payload: "1 1"
      */
-    sscanf(request, "%d %[^\n]", &action, payload);
+    parse_payload(request, &action, payload);
 
     if (action == REQ_CONN)
     {
@@ -341,21 +400,10 @@ void handle_client_req(server_t *server, int client_sock, char *request)
         }
         pthread_detach(thread);
 
-        return_response(client_sock, RES_CONN, itoa(client_id));
+        return_response(client_sock, RES_CONN, integer_to_string(client_id));
         return;
     }
-    switch (server->peer_mode)
-    {
-    case PEER_MODE_USER_STORAGE:
-        handle_client_storage_req(server, client_sock, action, payload);
-        break;
-    case PEER_MODE_USER_LOCATIONS:
-        handle_client_location_req(server, client_sock, action, payload);
-        break;
-    default:
-        fprintf(stderr, "Invalid peer mode\n");
-        break;
-    }
+    return_response(client_sock, ERROR, ERROR_PERMISSION_DENIED);
 }
 server_t *NewServer()
 {
@@ -367,6 +415,7 @@ server_t *NewServer()
     server->peer_mode = -1;
     server->user_count = 0;
     server->client_connections_count = 0;
+    server->active_mode = 0;
     return server;
 }
 
@@ -378,19 +427,19 @@ int main(int argc, char **argv)
     }
     srand(time(0));
     server_t *server = NewServer();
-    init_peer_connection(argv[1], server);
+    init_peer_connection_and_setup_server_conf(argv[1], server);
 
     struct sockaddr_storage client_storage;
     int client_socket = init_server(argv[2], &client_storage);
 
     // Accept connections from peer and initial requests from clients
     fd_set master_set, read_fds;
-    int fdmax = (server->server_sock > client_socket) ? server->server_sock : client_socket;
+    int peer_connection_socket = server->active_mode == 1 ? server->server_sock : server->peer_sock;
+    int fdmax = (peer_connection_socket > client_socket) ? peer_connection_socket : client_socket;
 
     FD_ZERO(&master_set);
-    FD_SET(server->server_sock, &master_set);
+    FD_SET(peer_connection_socket, &master_set);
     FD_SET(client_socket, &master_set);
-
     while (1)
     {
         read_fds = master_set;
@@ -399,24 +448,26 @@ int main(int argc, char **argv)
         {
             logexit("select");
         }
-
-        if (FD_ISSET(server->server_sock, &read_fds))
+        if (FD_ISSET(peer_connection_socket, &read_fds))
         {
             // Handle peer connection
-            char peer_addrstr[BUFSZ];
             char peer_buffer[BUFSZ];
-            int peerSock = accept_conncetion(server->server_sock, peer_addrstr, peer_buffer);
-            handle_peer_req(server, peerSock, peer_buffer);
+            if(server->active_mode == 1)
+            {
+                int peerSock = accept_conncetion(server->server_sock, peer_buffer);
+                handle_peer_req(server, peerSock, peer_buffer);
+            }else{
+                recv(server->peer_sock, peer_buffer, BUFSZ - 1, 0);
+                handle_peer_server_storage_req(server,  peer_buffer);
+            }
         }
 
         if (FD_ISSET(client_socket, &read_fds))
         {
             // Handle client connection
-            char client_addrstr[BUFSZ];
             char client_request[BUFSZ];
-            int clientSock = accept_conncetion(client_socket, client_addrstr, client_request);
-            printf("Received request from %s\n", client_addrstr);
-            handle_client_req(server, clientSock, client_request);
+            int clientSock = accept_conncetion(client_socket, client_request);
+            handle_inital_client_req(server, clientSock, client_request);
         }
     }
 

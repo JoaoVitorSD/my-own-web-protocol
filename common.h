@@ -24,12 +24,11 @@ struct response_t parse_response(char *buffer);
 
 void return_response(int socket, int req_action, const char *payload);
 
-char * itoa(int value);
-
+// Extract response to action and payload
+int parse_payload(char * rawPayload, int * action, char * payload);
+char *integer_to_string(int value);
 
 void handle_error(char *msg);
 
 
 int gen_peer_id();
-
-int gen_client_id();
