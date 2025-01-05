@@ -18,7 +18,6 @@ struct response_t peer_request(int peer_sock, int action, char *payload)
 {
     char buffer[BUFSZ];
     sprintf(buffer, "%d %s", action, payload);
-    printf("Requesting peer %d %s\n", action, payload);
     size_t count = send(peer_sock, buffer, strlen(buffer) + 1, 0);
     if (count != strlen(buffer) + 1)
     {
@@ -28,7 +27,6 @@ struct response_t peer_request(int peer_sock, int action, char *payload)
     memset(buffer, 0, BUFSZ);
     unsigned total = 0;
     recv(peer_sock, buffer + total, BUFSZ - total, 0);
-    printf("Received %s\n", buffer);
     return parse_response(buffer);
 }
 
@@ -42,9 +40,7 @@ void peer_response(int peer_sock, int action, char *payload)
     {
         logexit("send");
     }
-
 }
-
 
 void listen_to_socket(int socket, struct sockaddr_storage *storage)
 {
@@ -139,8 +135,12 @@ void init_peer_connection(char *peerPort, server_t *server)
     }
     // Peer connected, using socket to communicate
     server->peer_sock = s;
+    sscanf(response.payload, "%d", &server->peer_id);
+    printf("New Peer ID: %d\n", server->peer_id);
+    server->peer_id = gen_peer_id();
+    printf("Peer %d connected\n", server->peer_id);
+    peer_response(s, RES_CONNPEER, itoa(server->peer_id));
     server->peer_mode = PEER_MODE_USER_LOCATIONS;
-    printf("Peer connected\n");
 }
 
 void handle_peer_req(server_t *server, int peer_sock, char *clientInfo)
@@ -160,8 +160,9 @@ void handle_peer_req(server_t *server, int peer_sock, char *clientInfo)
         // TODO asign socket instead of port
         int peer_id = gen_peer_id();
         server->peer_id = peer_id;
-        printf("Peer connected %d\n", peer_id);
-        peer_response(peer_sock, RES_CONNPEER, itoa(peer_id));
+        printf("Peer %d connected\n", peer_id);
+        struct response_t response =  peer_request(peer_sock, RES_CONNPEER, itoa(peer_id));
+        printf("Response from peer: %s\n", response.payload);
         return;
     }
     if (action == REQ_DISCPEER)
@@ -206,7 +207,7 @@ void handle_client_storage_req(server_t *server, int client_sock, char *clientIn
         return_response(client_sock, OK, SUCCESSFUL_CREATE);
 
         printf("Requesting peer to add user\n");
-       struct response_t response = peer_request(server->peer_sock, REQ_USRADD, payload);
+        struct response_t response = peer_request(server->peer_sock, REQ_USRADD, payload);
         printf("Response from peer: %s\n", response.payload);
 
         return;
@@ -282,7 +283,7 @@ int main(int argc, char **argv)
     {
         usage(argc, argv);
     }
-    srand(time(NULL));
+    srand(time(0));
     server_t *server = NewServer();
     init_peer_connection(argv[1], server);
 
@@ -296,7 +297,6 @@ int main(int argc, char **argv)
     FD_SET(server->server_sock, &master_set);
     FD_SET(client_socket, &master_set);
 
-    printf("Server started %d\n", server->server_sock);
     while (1)
     {
         read_fds = master_set;

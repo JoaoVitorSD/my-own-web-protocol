@@ -5,20 +5,23 @@
 #ifndef SERVER
 #define SERVER
 
-typedef struct {
+typedef struct
+{
     char id[10];
     unsigned root;
 } user;
 
-
-typedef struct{
+typedef struct
+{
     char id[10];
     int location;
 } user_location;
 
-typedef struct {
+typedef struct
+{
     int peer_mode;
     int server_sock;
+    int server_id;
     int peer_sock;
     int peer_id;
     struct sockaddr_storage peer_storage;
@@ -26,7 +29,5 @@ typedef struct {
     int user_count;
     user_location **user_locations;
 } server_t;
-
-
 
 #endif

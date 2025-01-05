@@ -108,7 +108,7 @@ struct response_t parse_response(char *buffer)
     int action_response;
     char *payload_response = malloc(BUFSZ);
     sscanf(buffer, "%d %s", &action_response, payload_response);
-    printf("Received response: %d %s\n", action_response, payload_response);
+    // printf("Received response: %d %s\n", action_response, payload_response);
     return (struct response_t){action_response, payload_response};
 }
 
@@ -210,5 +210,5 @@ void handle_error(char *message)
 
 int gen_peer_id()
 {
-    return 40000 + rand() % 10000;
+    return 1+ rand() % 1000;
 }
