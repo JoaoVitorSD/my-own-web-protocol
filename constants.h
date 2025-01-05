@@ -8,6 +8,8 @@
 
 // Control Values
 #define MAX_CLIENT_CONNECTIONS 10
+#define PEER_MODE_USER_STORAGE 1
+#define PEER_MODE_USER_LOCATIONS 2
 
 // Debug
 #define PRINTUSERS 1000

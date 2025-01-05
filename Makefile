@@ -6,3 +6,5 @@ all:
 
 clean:
 	rm common.o client server server-mt
+
+

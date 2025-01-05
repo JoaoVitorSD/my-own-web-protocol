@@ -7,6 +7,43 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include "time.h"
+#include <pthread.h>
+
+typedef struct
+{
+    server_t *server;
+    int client_sock;
+    char request[BUFSZ];
+} thread_data_t;
+void *handle_client_connection(void *arg)
+{
+    thread_data_t *data = (thread_data_t *)arg;
+    handle_client_req(data->server, data->client_sock, data->request);
+    close(data->client_sock);
+    free(data);
+    pthread_exit(NULL);
+}
+thread_data_t *accept_connection_data(int socket, char *caddrstr)
+{
+    thread_data_t *data = malloc(sizeof(thread_data_t));
+    struct sockaddr_storage cstorage;
+    struct sockaddr *caddr = (struct sockaddr *)(&cstorage);
+    socklen_t caddrlen = sizeof(cstorage);
+
+    memset(data->request, 0, BUFSZ);
+    data->client_sock = accept(socket, caddr, &caddrlen);
+    if (data->client_sock == -1)
+    {
+        logexit("accept");
+        free(data);
+        return NULL;
+    }
+
+    addrtostr(caddr, caddrstr, BUFSZ);
+    recv(data->client_sock, data->request, BUFSZ - 1, 0);
+    return data;
+}
+
 void usage(int argc, char **argv)
 {
     printf("usage: %s <peer-2-peer port> <connection port>\n", argv[0]);
@@ -70,7 +107,6 @@ void listen_to_socket(int socket, struct sockaddr_storage *storage)
 
 int init_server(char *port, struct sockaddr_storage *storage)
 {
-    printf("Initializing server on port %s\n", port);
     int port_n = atoi(port);
     if (0 != server_sockaddr_init(port_n, storage))
     {
@@ -88,6 +124,7 @@ int init_server(char *port, struct sockaddr_storage *storage)
 
 int accept_conncetion(int socket, char *caddrstr, char *buffer)
 {
+    printf("Accepting connection\n");
     struct sockaddr_storage cstorage;
     struct sockaddr *caddr = (struct sockaddr *)(&cstorage);
     socklen_t caddrlen = sizeof(cstorage);
@@ -100,7 +137,6 @@ int accept_conncetion(int socket, char *caddrstr, char *buffer)
     }
     addrtostr(caddr, caddrstr, BUFSZ);
     size_t count = recv(csock, buffer, BUFSZ - 1, 0);
-    printf("Received from %s: %s\n", caddrstr, buffer);
     return csock;
 }
 
@@ -161,7 +197,6 @@ void handle_peer_req(server_t *server, int peer_sock, char *clientInfo)
         server->peer_id = peer_id;
         printf("Peer %d connected\n", peer_id);
         struct response_t response =  peer_request(peer_sock, RES_CONNPEER, itoa(peer_id));
-        printf("Response from peer: %s\n", response.payload);
         return;
     }
     if (action == REQ_DISCPEER)
@@ -190,6 +225,39 @@ user *NewUserFromPayload(char *payload)
     newUser = malloc(sizeof(user));
     sscanf(payload, "%s %d", newUser->id, &newUser->root);
     return newUser;
+}
+typedef struct
+{
+    server_t *server;
+    int client_sock;
+    int client_id;
+} client_thread_data_t;
+
+void *handle_client_thread(void *arg)
+{
+    client_thread_data_t *data = (client_thread_data_t *)arg;
+    char buffer[BUFSZ];
+
+    printf("Started listening thread for client %d\n", data->client_id);
+
+    while (1)
+    {
+        memset(buffer, 0, BUFSZ);
+        ssize_t received = recv(data->client_sock, buffer, BUFSZ - 1, 0);
+
+        if (received <= 0)
+        {
+            printf("Client %d disconnected\n", data->client_id);
+            close(data->client_sock);
+            free(data);
+            pthread_exit(NULL);
+        }
+
+        printf("Received from client %d: %s\n", data->client_id, buffer);
+        handle_client_req(data->server, data->client_sock, buffer);
+    }
+
+    return NULL;
 }
 
 void handle_client_storage_req(server_t *server, int client_sock, int action, char *payload)
@@ -246,17 +314,39 @@ void handle_client_req(server_t *server, int client_sock, char *request)
     int action;
     char payload[BUFSZ];
     sscanf(request, "%d %s", &action, payload);
-    if(action == REQ_CONN){
-        if(server->client_connections_count>MAX_CLIENT_CONNECTIONS){
+
+    if (action == REQ_CONN)
+    {
+        if (server->client_connections_count >= MAX_CLIENT_CONNECTIONS)
+        {
             return_response(client_sock, ERROR, ERROR_CLIENT_LIMIT_EXCEEDED);
             return;
         }
+
         int loc_id;
         sscanf(payload, "%d", &loc_id);
-        int client_id = gen_client_id();
-        server->client_connections[loc_id-1] = client_id;
+        int client_id = ++server->client_connections_count;
+        server->client_connections[loc_id - 1] = client_id;
         printf("Client %d added(Loc %d)\n", client_id, loc_id);
-        server->client_connections_count++;
+        server->client_sockets[client_id] = client_sock;
+
+        // Create thread data
+        client_thread_data_t *thread_data = malloc(sizeof(client_thread_data_t));
+        thread_data->server = server;
+        thread_data->client_sock = client_sock;
+        thread_data->client_id = client_id;
+
+        // Create listening thread
+        pthread_t thread;
+        if (pthread_create(&thread, NULL, handle_client_thread, thread_data) != 0)
+        {
+            fprintf(stderr, "Failed to create thread for client %d\n", client_id);
+            free(thread_data);
+            return_response(client_sock, ERROR, "Failed to create handler thread");
+            return;
+        }
+        pthread_detach(thread);
+
         return_response(client_sock, RES_CONN, itoa(client_id));
         return;
     }
@@ -330,6 +420,7 @@ int main(int argc, char **argv)
             char client_addrstr[BUFSZ];
             char client_request[BUFSZ];
             int clientSock = accept_conncetion(client_socket, client_addrstr, client_request);
+            printf("Received request from %s\n", client_addrstr);
             handle_client_req(server, clientSock, client_request);
         }
     }

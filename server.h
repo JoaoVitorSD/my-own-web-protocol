@@ -1,6 +1,5 @@
 #include <sys/types.h>
-#define PEER_MODE_USER_STORAGE 1
-#define PEER_MODE_USER_LOCATIONS 2
+
 
 #ifndef SERVER
 #define SERVER
@@ -30,6 +29,7 @@ typedef struct
     user_location* user_locations[10];
     int client_connections[10];
     int client_connections_count;
+    int client_sockets[10];
 } server_t;
 
 #endif

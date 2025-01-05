@@ -6,7 +6,20 @@
 #include <unistd.h>
 #include <pthread.h>
 
-void validate_loc_id_and_exit(int loc_id)
+struct infraestructure_t
+{
+
+	char *server_ip;
+	char *server_storage_port;
+	char *server_location_port;
+	int loc_id;
+	int storage_sock;
+	int location_sock;
+	int client_id_storage;
+	int client_id_location;
+};
+
+void validate_loc_id_and_if_invalid_exit(int loc_id)
 {
 	if (loc_id < 1 || loc_id > 10)
 	{
@@ -15,10 +28,29 @@ void validate_loc_id_and_exit(int loc_id)
 	}
 }
 
-int connect_to_server_and_return_client_id(const char *server_ip, const char *server_port, int loc_id, int *server_sock, int *client_id)
+struct infraestructure_t *extract_infraestructure(int argc, char **argv)
 {
+	struct infraestructure_t *infraestructure = malloc(sizeof(struct infraestructure_t));
+	if (argc != 5)
+	{
+		printf("Usage: %s <server_ip> <server_storage_port> <server_location_port> <loc_id>\n", argv[0]);
+		exit(EXIT_FAILURE);
+	}
+	infraestructure->server_ip = argv[1];
+	infraestructure->server_storage_port = argv[2];
+	infraestructure->server_location_port = argv[3];
+	infraestructure->loc_id = atoi(argv[4]);
+	validate_loc_id_and_if_invalid_exit(infraestructure->loc_id);
+
+	return infraestructure;
+}
+int connect_to_server_and_return_client_id(struct infraestructure_t *infraestructure, int peer_mode)
+{
+	int *server_sock = peer_mode == PEER_MODE_USER_STORAGE ? &infraestructure->storage_sock : &infraestructure->location_sock;
+	char *peer_port = peer_mode == PEER_MODE_USER_STORAGE ? infraestructure->server_storage_port : infraestructure->server_location_port;
+	int *client_id = peer_mode == PEER_MODE_USER_STORAGE ? &infraestructure->client_id_storage : &infraestructure->client_id_location;
 	struct sockaddr_storage server_storage;
-	if (addrparse(server_ip, server_port, &server_storage) != 0)
+	if (addrparse(infraestructure->server_ip, peer_port, &server_storage) != 0)
 	{
 		handle_error("addrparse");
 	}
@@ -36,17 +68,14 @@ int connect_to_server_and_return_client_id(const char *server_ip, const char *se
 	}
 
 	char payload[BUFSZ];
-	snprintf(payload, BUFSZ, "%d", loc_id);
+	snprintf(payload, BUFSZ, "%d", infraestructure->loc_id);
 	struct response_t response = client_request_to_server(*server_sock, REQ_CONN, payload);
 
 	if (response.action == ERROR)
 	{
 		handle_error(response.payload);
 	}
-
 	sscanf(response.payload, "%d", client_id);
-	printf("Socket server %d ", *server_sock);
-	close(*server_sock);
 	return *client_id;
 }
 
@@ -67,25 +96,11 @@ void disconnect_from_server(int server_sock, int client_id)
 
 int main(int argc, char **argv)
 {
-	if (argc != 5)
-	{
-		printf("Usage: %s <server_ip> <server_storage_port> <server_location_port> <loc_id>\n", argv[0]);
-		exit(EXIT_FAILURE);
-	}
-
-	const char *server_ip = argv[1];
-	const char *server_storage_port = argv[2];
-	const char *server_location_port = argv[3];
-	int loc_id = atoi(argv[4]);
-
-	validate_loc_id_and_exit(loc_id);
-
-	int storage_sock, location_sock;
-	int client_id_storage, client_id_location;
-
+	struct infraestructure_t *infraestructure = extract_infraestructure(argc, argv);
 	// Connect to SU
-	connect_to_server_and_return_client_id(server_ip, server_storage_port, loc_id, &storage_sock, &client_id_storage);
-	printf("SU New Id: %d\n", client_id_storage);
+	connect_to_server_and_return_client_id(infraestructure, PEER_MODE_USER_STORAGE);
+	printf("SU New Id: %d\n", infraestructure->client_id_storage);
+
 	// Connect to SL
 	// connect_to_server_and_return_client_id(server_ip, server_location_port, loc_id, &location_sock, &client_id_location);
 	// printf("SL New Id: %d\n", client_id_location);
@@ -96,22 +111,22 @@ int main(int argc, char **argv)
 		printf("Enter command: ");
 		fgets(command, BUFSZ, stdin);
 		command[strcspn(command, "\n")] = '\0'; // Remove newline character
-		printf("Command: %s\n", command);
 		if (strcmp(command, "kill") == 0)
 		{
-			disconnect_from_server(storage_sock, client_id_storage);
-			disconnect_from_server(location_sock, client_id_location);
+			// disconnect_from_server(storage_sock, client_id_storage);
+			// disconnect_from_server(location_sock, client_id_location);
 			break;
 		}
 		else if (strncmp(command, "add ", 4) == 0)
 		{
 			char uid[11];
 			int is_special;
+			printf("Adding user\n");
 			sscanf(command + 4, "%10s %d", uid, &is_special);
 			char payload[BUFSZ];
-			memset(payload, 0, BUFSZ);	
-			snprintf(payload, BUFSZ, "%s %d", uid, is_special);
-			struct response_t response = client_request_to_server(storage_sock, REQ_USRADD, payload);
+			memset(payload, 0, BUFSZ);
+			sprintf(payload, "%s %d", uid, is_special);
+			struct response_t response = client_request_to_server(infraestructure->storage_sock, REQ_USRADD, payload);
 
 			if (response.action == ERROR)
 			{
@@ -125,12 +140,13 @@ int main(int argc, char **argv)
 			{
 				printf("New user added: %s\n", uid);
 			}
+			printf("User added\n");
 		}
 		else if (strncmp(command, "find ", 5) == 0)
 		{
 			char uid[11];
 			sscanf(command + 5, "%10s", uid);
-			struct response_t response = client_request_to_server(location_sock, REQ_USRLOC, uid);
+			struct response_t response = client_request_to_server(infraestructure->location_sock, REQ_USRLOC, uid);
 
 			if (response.action == ERROR)
 			{
@@ -143,8 +159,7 @@ int main(int argc, char **argv)
 		}
 		else if (strcmp(command, "print") == 0)
 		{
-			struct response_t response = client_request_to_server(storage_sock, PRINTUSERS, "");
-	
+			struct response_t response = client_request_to_server(infraestructure->storage_sock, PRINTUSERS, "");
 			if (response.action == ERROR)
 			{
 				handle_error(response.payload);
