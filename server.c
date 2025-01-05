@@ -99,9 +99,8 @@ int accept_conncetion(int socket, char *caddrstr, char *buffer)
         return -1;
     }
     addrtostr(caddr, caddrstr, BUFSZ);
-    printf("[log] connection from %s\n", caddrstr);
     size_t count = recv(csock, buffer, BUFSZ - 1, 0);
-    printf("[msg] %s, %d bytes: %s\n", caddrstr, (int)count, buffer);
+    printf("Received from %s: %s\n", caddrstr, buffer);
     return csock;
 }
 
@@ -199,16 +198,12 @@ void handle_client_storage_req(server_t *server, int client_sock, int action, ch
   
         if (action == REQ_USRADD)
         {
+            printf("REQ_USRADD %s\n", payload);
             user *newUser = NewUserFromPayload(payload);
             server->users[server->user_count] = newUser;
             server->user_count++;
             printf("Adding new user %s\n", newUser->id);
             return_response(client_sock, OK, SUCCESSFUL_CREATE);
-
-            printf("Requesting peer to add user\n");
-            struct response_t response = peer_request(server->peer_sock, REQ_USRADD, payload);
-            printf("Response from peer: %s\n", response.payload);
-
             return;
         }
     if (action == PRINTUSERS)
@@ -247,6 +242,7 @@ void handle_client_location_req(server_t *server, int client_sock, int action, c
 
 void handle_client_req(server_t *server, int client_sock, char *request)
 {
+    printf("Handling client request %s\n", request);
     int action;
     char payload[BUFSZ];
     sscanf(request, "%d %s", &action, payload);

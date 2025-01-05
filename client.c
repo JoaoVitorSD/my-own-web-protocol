@@ -37,7 +37,7 @@ int connect_to_server_and_return_client_id(const char *server_ip, const char *se
 
 	char payload[BUFSZ];
 	snprintf(payload, BUFSZ, "%d", loc_id);
-	struct response_t response = request(*server_sock, REQ_CONN, payload);
+	struct response_t response = client_request_to_server(*server_sock, REQ_CONN, payload);
 
 	if (response.action == ERROR)
 	{
@@ -45,6 +45,8 @@ int connect_to_server_and_return_client_id(const char *server_ip, const char *se
 	}
 
 	sscanf(response.payload, "%d", client_id);
+	printf("Socket server %d ", *server_sock);
+	close(*server_sock);
 	return *client_id;
 }
 
@@ -52,7 +54,7 @@ void disconnect_from_server(int server_sock, int client_id)
 {
 	char payload[BUFSZ];
 	snprintf(payload, BUFSZ, "%d", client_id);
-	struct response_t response = request(server_sock, REQ_DISC, payload);
+	struct response_t response = client_request_to_server(server_sock, REQ_DISC, payload);
 
 	if (response.action == ERROR)
 	{
@@ -84,10 +86,9 @@ int main(int argc, char **argv)
 	// Connect to SU
 	connect_to_server_and_return_client_id(server_ip, server_storage_port, loc_id, &storage_sock, &client_id_storage);
 	printf("SU New Id: %d\n", client_id_storage);
-
 	// Connect to SL
-	connect_to_server_and_return_client_id(server_ip, server_location_port, loc_id, &location_sock, &client_id_location);
-	printf("SL New Id: %d\n", client_id_location);
+	// connect_to_server_and_return_client_id(server_ip, server_location_port, loc_id, &location_sock, &client_id_location);
+	// printf("SL New Id: %d\n", client_id_location);
 
 	char command[BUFSZ];
 	while (1)
@@ -95,7 +96,7 @@ int main(int argc, char **argv)
 		printf("Enter command: ");
 		fgets(command, BUFSZ, stdin);
 		command[strcspn(command, "\n")] = '\0'; // Remove newline character
-
+		printf("Command: %s\n", command);
 		if (strcmp(command, "kill") == 0)
 		{
 			disconnect_from_server(storage_sock, client_id_storage);
@@ -108,8 +109,9 @@ int main(int argc, char **argv)
 			int is_special;
 			sscanf(command + 4, "%10s %d", uid, &is_special);
 			char payload[BUFSZ];
+			memset(payload, 0, BUFSZ);	
 			snprintf(payload, BUFSZ, "%s %d", uid, is_special);
-			struct response_t response = request(storage_sock, REQ_USRADD, payload);
+			struct response_t response = client_request_to_server(storage_sock, REQ_USRADD, payload);
 
 			if (response.action == ERROR)
 			{
@@ -128,7 +130,7 @@ int main(int argc, char **argv)
 		{
 			char uid[11];
 			sscanf(command + 5, "%10s", uid);
-			struct response_t response = request(location_sock, REQ_USRLOC, uid);
+			struct response_t response = client_request_to_server(location_sock, REQ_USRLOC, uid);
 
 			if (response.action == ERROR)
 			{
@@ -141,7 +143,7 @@ int main(int argc, char **argv)
 		}
 		else if (strcmp(command, "print") == 0)
 		{
-			struct response_t response = request(storage_sock, PRINTUSERS, "");
+			struct response_t response = client_request_to_server(storage_sock, PRINTUSERS, "");
 	
 			if (response.action == ERROR)
 			{

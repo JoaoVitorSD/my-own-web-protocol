@@ -17,9 +17,8 @@ void addrtostr(const struct sockaddr *addr, char *str, size_t strsize);
 int server_sockaddr_init(uint16_t port,
                          struct sockaddr_storage *storage);
 
-struct response_t request(int socket, int req_action, const char *buffer);
+struct response_t client_request_to_server(int socket, int req_action, const char *buffer);
 
-struct response_t request_in_port(int port, int req_action, const char *buffer);
 
 struct response_t parse_response(char *buffer);
 

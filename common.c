@@ -112,7 +112,7 @@ struct response_t parse_response(char *buffer)
     return (struct response_t){action_response, payload_response};
 }
 
-struct response_t request(int socket, int action, char *payload)
+struct response_t client_request_to_server(int socket, int action, char *payload)
 {
     char buffer[BUFSZ];
     sprintf(buffer, "%d %s", action, payload);
@@ -127,37 +127,22 @@ struct response_t request(int socket, int action, char *payload)
     unsigned total = 0;
     while (1)
     {
-        count = recv(socket, buffer + total, BUFSZ - total, 0);
-        if (count == 0)
+        ssize_t count = recv(socket, buffer + total, BUFSZ - total - 1, 0);
+        if (count <= 0)
         {
-            break;
+            logexit("recv");
         }
         total += count;
+        if (strchr(buffer, '|') != NULL)
+        {
+            buffer[total - 1] = '\0';
+            break;
+        }
     }
-
     return parse_response(buffer);
 }
 
 
-struct response_t request_in_port(int port, int action, char *payload)
-{
-    struct sockaddr_storage storage;
-    if (0 != server_sockaddr_init(port, &storage))
-    {
-        logexit("server_sockaddr_init");
-    }
-    int s = socket(storage.ss_family, SOCK_STREAM, 0);
-    if (s == -1)
-    {
-        logexit("socket");
-    }
-    if (0 != connect(s, (struct sockaddr *)(&storage), sizeof(storage)))
-    {
-        logexit("connect");
-    }
-    const struct response_t response = request(s, action, payload);
-    return response;
-};
 
 char *itoa(int value)
 {
@@ -171,15 +156,12 @@ void return_response(int socket, int action, char *payload)
     char buffer[BUFSZ];
     sprintf(buffer, "%d %s", action, payload);
 
-    printf("Sending response: %s\n", buffer);
     size_t count = send(socket, buffer, strlen(buffer) + 1, 0);
     if (count != strlen(buffer) + 1)
     {
         printf("Error sending response\n");
         logexit("send");
     }
-    printf("Response sent\n");
-    close(socket);
 }
 
 // 01 : ”Peer limit exceeded” 02 : ”Peer not found” 09 : ”Client limit exceeded” 10 : “Client not found” 17 : “User limit exceeded” 18 : “User not found” 19 : “Permission denied”
