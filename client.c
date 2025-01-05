@@ -121,7 +121,6 @@ int main(int argc, char **argv)
 		{
 			char uid[11];
 			int is_special;
-			printf("Adding user\n");
 			sscanf(command + 4, "%10s %d", uid, &is_special);
 			char payload[BUFSZ];
 			memset(payload, 0, BUFSZ);
@@ -131,6 +130,7 @@ int main(int argc, char **argv)
 			if (response.action == ERROR)
 			{
 				handle_error(response.payload);
+
 			}
 			else if (response.action == OK)
 			{
@@ -140,7 +140,6 @@ int main(int argc, char **argv)
 			{
 				printf("New user added: %s\n", uid);
 			}
-			printf("User added\n");
 		}
 		else if (strncmp(command, "find ", 5) == 0)
 		{
