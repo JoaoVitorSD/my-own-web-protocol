@@ -65,8 +65,8 @@ int main(int argc, char **argv) {
 			break;
 		}
 		total += count;
+		
 	}
-	close(s);
 
 	printf("received %u bytes\n", total);
 	puts(buf);

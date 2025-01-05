@@ -1,4 +1,6 @@
 #include <sys/types.h>
+#define PEER_MODE_USER_STORAGE 1
+#define PEER_MODE_USER_LOCATIONS 2
 
 #ifndef SERVER
 #define SERVER
@@ -15,11 +17,10 @@ typedef struct{
 } user_location;
 
 typedef struct {
-    int is_user_storage_server;
-    int is_user_location_server;
-    int peer_id;
+    int peer_mode;
+    int server_sock;
     int peer_sock;
-    int peer_pair_id;
+    int peer_id;
     struct sockaddr_storage peer_storage;
     user **users;
     int user_count;

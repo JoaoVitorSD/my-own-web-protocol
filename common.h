@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stdlib.h>
-
 #include <arpa/inet.h>
 #include "constants.h"
 
@@ -22,6 +21,8 @@ struct response_t request(int socket, int req_action, const char *buffer);
 
 struct response_t request_in_port(int port, int req_action, const char *buffer);
 
+struct response_t parse_response(char *buffer);
+
 void return_response(int socket, int req_action, const char *payload);
 
 char * itoa(int value);
@@ -30,4 +31,4 @@ char * itoa(int value);
 void handle_error(char *msg);
 
 
-int gen_peer_port();
+int gen_peer_id();

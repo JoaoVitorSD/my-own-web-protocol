@@ -1,15 +1,7 @@
 {
-  "files.associations": {
-    "*.embeddedhtml": "html",
-    "types.h": "c",
-    "common.h": "c",
-    "inet.h": "c",
-    "stdlib.h": "c",
-    "messages.h": "c",
-    "constants.h": "c",
-    "socket.h": "c",
-    "stdio.h": "c",
-    "string.h": "c",
-    "inttypes.h": "c"
-  }
+    "files.associations": {
+        "unistd.h": "c",
+        "pthread.h": "c",
+        "stdio.h": "c"
+    }
 }

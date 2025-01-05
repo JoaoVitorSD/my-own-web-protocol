@@ -103,6 +103,15 @@ int server_sockaddr_init(uint16_t port,
     return 0;
 }
 
+struct response_t parse_response(char *buffer)
+{
+    int action_response;
+    char *payload_response = malloc(BUFSZ);
+    sscanf(buffer, "%d %s", &action_response, payload_response);
+    printf("Received response: %d %s\n", action_response, payload_response);
+    return (struct response_t){action_response, payload_response};
+}
+
 struct response_t request(int socket, int action, char *payload)
 {
     char buffer[BUFSZ];
@@ -119,6 +128,7 @@ struct response_t request(int socket, int action, char *payload)
     while (1)
     {
         count = recv(socket, buffer + total, BUFSZ - total, 0);
+        printf("Received %d bytes\n", count);
         if (count == 0)
         {
             break;
@@ -126,12 +136,9 @@ struct response_t request(int socket, int action, char *payload)
         total += count;
     }
 
-    int action_response;
-    char *payload_response = malloc(BUFSZ);
-    sscanf(buffer, "%d %s", &action_response, payload_response);
-    printf("Received response: %d %s\n", action_response, payload_response);
-    return (struct response_t){action_response, payload_response};
+    return parse_response(buffer);
 }
+
 
 struct response_t request_in_port(int port, int action, char *payload)
 {
@@ -172,6 +179,7 @@ void return_response(int socket, int action, char *payload)
         printf("Error sending response\n");
         logexit("send");
     }
+    printf("Response sent\n");
     close(socket);
 }
 
@@ -200,7 +208,7 @@ void handle_error(char *message)
         printf("Error: Unknown error %s\n", message);
 }
 
-int gen_peer_port()
+int gen_peer_id()
 {
     return 40000 + rand() % 10000;
 }
