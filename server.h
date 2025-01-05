@@ -25,9 +25,11 @@ typedef struct
     int peer_sock;
     int peer_id;
     struct sockaddr_storage peer_storage;
-    user **users;
     int user_count;
-    user_location **user_locations;
+    user* users[30];
+    user_location* user_locations[10];
+    int client_connections[10];
+    int client_connections_count;
 } server_t;
 
 #endif

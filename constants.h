@@ -6,8 +6,10 @@
 #define RES_CONN 21
 #define REQ_DISC 22
 
-// DEBUG
+// Control Values
+#define MAX_CLIENT_CONNECTIONS 10
 
+// Debug
 #define PRINTUSERS 1000
 // Data Messages
 #define REQ_USRADD 33

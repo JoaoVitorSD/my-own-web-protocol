@@ -1,77 +1,158 @@
 #include "common.h"
-
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <arpa/inet.h>
+#include <unistd.h>
+#include <pthread.h>
 
-void usage(int argc, char **argv) {
-	printf("usage: %s <server IP> <server port>\n", argv[0]);
-	printf("example: %s 40000 50000\n", argv[0]);
-	exit(EXIT_FAILURE);
+void validate_loc_id_and_exit(int loc_id)
+{
+	if (loc_id < 1 || loc_id > 10)
+	{
+		printf("Invalid argument\n");
+		exit(EXIT_FAILURE);
+	}
 }
 
-#define BUFSZ 1024
-
-int main(int argc, char **argv) {
-	if (argc < 3) {
-		usage(argc, argv);
-	}
-
-	struct sockaddr_storage storage;
-	if (0 != addrparse(argv[1], argv[2], &storage)) {
-		usage(argc, argv);
-	}
-
-	int s;
-	s = socket(storage.ss_family, SOCK_STREAM, 0);
-	if (s == -1) {
-		logexit("socket");
-	}
-	struct sockaddr *addr = (struct sockaddr *)(&storage);
-	if (0 != connect(s, addr, sizeof(storage))) {
-		logexit("connect");
-	}
-
-	char addrstr[BUFSZ];
-	addrtostr(addr, addrstr, BUFSZ);
-
-	printf("connected to %s\n", addrstr);
-
-	char buf[BUFSZ];
-	memset(buf, 0, BUFSZ);
-	printf("mensagem> ");
-	fgets(buf, BUFSZ-1, stdin);
-	size_t len = strlen(buf);
-	if (len > 0 && buf[len - 1] == '\n')
+int connect_to_server_and_return_client_id(const char *server_ip, const char *server_port, int loc_id, int *server_sock, int *client_id)
+{
+	struct sockaddr_storage server_storage;
+	if (addrparse(server_ip, server_port, &server_storage) != 0)
 	{
-		buf[len - 1] = '\0';
-	}
-	size_t count = send(s, buf, strlen(buf)+1, 0);
-	if (count != strlen(buf)+1) {
-		logexit("send");
+		handle_error("addrparse");
 	}
 
-	memset(buf, 0, BUFSZ);
-	unsigned total = 0;
-	while(1) {
-		count = recv(s, buf + total, BUFSZ - total, 0);
-		if (count == 0) {
-			// Connection terminated.
+	*server_sock = socket(server_storage.ss_family, SOCK_STREAM, 0);
+	if (*server_sock == -1)
+	{
+		handle_error("socket");
+	}
+
+	struct sockaddr *addr = (struct sockaddr *)(&server_storage);
+	if (connect(*server_sock, addr, sizeof(server_storage)) != 0)
+	{
+		handle_error("connect");
+	}
+
+	char payload[BUFSZ];
+	snprintf(payload, BUFSZ, "%d", loc_id);
+	struct response_t response = request(*server_sock, REQ_CONN, payload);
+
+	if (response.action == ERROR)
+	{
+		handle_error(response.payload);
+	}
+
+	sscanf(response.payload, "%d", client_id);
+	return *client_id;
+}
+
+void disconnect_from_server(int server_sock, int client_id)
+{
+	char payload[BUFSZ];
+	snprintf(payload, BUFSZ, "%d", client_id);
+	struct response_t response = request(server_sock, REQ_DISC, payload);
+
+	if (response.action == ERROR)
+	{
+		handle_error(response.payload);
+	}
+
+	printf("Successful disconnect\n");
+	close(server_sock);
+}
+
+int main(int argc, char **argv)
+{
+	if (argc != 5)
+	{
+		printf("Usage: %s <server_ip> <server_storage_port> <server_location_port> <loc_id>\n", argv[0]);
+		exit(EXIT_FAILURE);
+	}
+
+	const char *server_ip = argv[1];
+	const char *server_storage_port = argv[2];
+	const char *server_location_port = argv[3];
+	int loc_id = atoi(argv[4]);
+
+	validate_loc_id_and_exit(loc_id);
+
+	int storage_sock, location_sock;
+	int client_id_storage, client_id_location;
+
+	// Connect to SU
+	connect_to_server_and_return_client_id(server_ip, server_storage_port, loc_id, &storage_sock, &client_id_storage);
+	printf("SU New Id: %d\n", client_id_storage);
+
+	// Connect to SL
+	connect_to_server_and_return_client_id(server_ip, server_location_port, loc_id, &location_sock, &client_id_location);
+	printf("SL New Id: %d\n", client_id_location);
+
+	char command[BUFSZ];
+	while (1)
+	{
+		printf("Enter command: ");
+		fgets(command, BUFSZ, stdin);
+		command[strcspn(command, "\n")] = '\0'; // Remove newline character
+
+		if (strcmp(command, "kill") == 0)
+		{
+			disconnect_from_server(storage_sock, client_id_storage);
+			disconnect_from_server(location_sock, client_id_location);
 			break;
 		}
-		total += count;
-		
+		else if (strncmp(command, "add ", 4) == 0)
+		{
+			char uid[11];
+			int is_special;
+			sscanf(command + 4, "%10s %d", uid, &is_special);
+			char payload[BUFSZ];
+			snprintf(payload, BUFSZ, "%s %d", uid, is_special);
+			struct response_t response = request(storage_sock, REQ_USRADD, payload);
+
+			if (response.action == ERROR)
+			{
+				handle_error(response.payload);
+			}
+			else if (response.action == OK)
+			{
+				printf("User updated: %s\n", uid);
+			}
+			else
+			{
+				printf("New user added: %s\n", uid);
+			}
+		}
+		else if (strncmp(command, "find ", 5) == 0)
+		{
+			char uid[11];
+			sscanf(command + 5, "%10s", uid);
+			struct response_t response = request(location_sock, REQ_USRLOC, uid);
+
+			if (response.action == ERROR)
+			{
+				handle_error(response.payload);
+			}
+			else
+			{
+				printf("Current location: %s\n", response.payload);
+			}
+		}
+		else if (strcmp(command, "print") == 0)
+		{
+			struct response_t response = request(storage_sock, PRINTUSERS, "");
+	
+			if (response.action == ERROR)
+			{
+				handle_error(response.payload);
+			}
+		}
+		else
+		{
+			printf("Unknown command\n");
+		}
 	}
 
-	printf("received %u bytes\n", total);
-	puts(buf);
-
-	exit(EXIT_SUCCESS);
+	return 0;
 }
-
-

@@ -128,7 +128,6 @@ struct response_t request(int socket, int action, char *payload)
     while (1)
     {
         count = recv(socket, buffer + total, BUFSZ - total, 0);
-        printf("Received %d bytes\n", count);
         if (count == 0)
         {
             break;
@@ -210,5 +209,10 @@ void handle_error(char *message)
 
 int gen_peer_id()
 {
-    return 1+ rand() % 1000;
+    return 1+ rand() % 100000;
+}
+
+int gen_client_id()
+{
+    return  rand() % 100000;
 }

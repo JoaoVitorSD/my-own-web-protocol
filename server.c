@@ -193,25 +193,24 @@ user *NewUserFromPayload(char *payload)
     return newUser;
 }
 
-void handle_client_storage_req(server_t *server, int client_sock, char *clientInfo)
+void handle_client_storage_req(server_t *server, int client_sock, int action, char *payload)
 {
-    int action;
-    char payload[BUFSZ];
-    sscanf(clientInfo, "%d %s", &action, payload);
-    if (action == REQ_USRADD)
-    {
-        user *newUser = NewUserFromPayload(payload);
-        server->users[server->user_count] = newUser;
-        server->user_count++;
-        printf("Adding new user %s\n", newUser->id);
-        return_response(client_sock, OK, SUCCESSFUL_CREATE);
+    printf("Handling client request %d\n", action);
+  
+        if (action == REQ_USRADD)
+        {
+            user *newUser = NewUserFromPayload(payload);
+            server->users[server->user_count] = newUser;
+            server->user_count++;
+            printf("Adding new user %s\n", newUser->id);
+            return_response(client_sock, OK, SUCCESSFUL_CREATE);
 
-        printf("Requesting peer to add user\n");
-        struct response_t response = peer_request(server->peer_sock, REQ_USRADD, payload);
-        printf("Response from peer: %s\n", response.payload);
+            printf("Requesting peer to add user\n");
+            struct response_t response = peer_request(server->peer_sock, REQ_USRADD, payload);
+            printf("Response from peer: %s\n", response.payload);
 
-        return;
-    }
+            return;
+        }
     if (action == PRINTUSERS)
     {
         for (int i = 0; i < server->user_count; i++)
@@ -220,14 +219,12 @@ void handle_client_storage_req(server_t *server, int client_sock, char *clientIn
         }
     }
 
-    return_response(client_sock, ERROR, clientInfo);
+    return_response(client_sock, ERROR, "Invalid action");
 }
 
-void handle_client_location_req(server_t *server, int client_sock, char *clientInfo)
+void handle_client_location_req(server_t *server, int client_sock, int action, char *payload)
 {
-    int action;
-    char payload[BUFSZ];
-    sscanf(clientInfo, "%d %s", &action, payload);
+   
     // if (action == REQ_USRLOC)
     // {
     //     user *newUser = NewUserFromPayload(payload);
@@ -248,15 +245,32 @@ void handle_client_location_req(server_t *server, int client_sock, char *clientI
     return_response(client_sock, ERROR, ERROR_USER_NOT_FOUND);
 }
 
-void handle_client_req(server_t *server, int client_sock, char *clientInfo)
+void handle_client_req(server_t *server, int client_sock, char *request)
 {
+    int action;
+    char payload[BUFSZ];
+    sscanf(request, "%d %s", &action, payload);
+    if(action == REQ_CONN){
+        if(server->client_connections_count>MAX_CLIENT_CONNECTIONS){
+            return_response(client_sock, ERROR, ERROR_CLIENT_LIMIT_EXCEEDED);
+            return;
+        }
+        int loc_id;
+        sscanf(payload, "%d", &loc_id);
+        int client_id = gen_client_id();
+        server->client_connections[loc_id-1] = client_id;
+        printf("Client %d added(Loc %d)\n", client_id, loc_id);
+        server->client_connections_count++;
+        return_response(client_sock, RES_CONN, itoa(client_id));
+        return;
+    }
     switch (server->peer_mode)
     {
     case PEER_MODE_USER_STORAGE:
-        handle_client_storage_req(server, client_sock, clientInfo);
+        handle_client_storage_req(server, client_sock, action, payload);
         break;
     case PEER_MODE_USER_LOCATIONS:
-        handle_client_location_req(server, client_sock, clientInfo);
+        handle_client_location_req(server, client_sock, action, payload);
         break;
     default:
         fprintf(stderr, "Invalid peer mode\n");
@@ -271,9 +285,8 @@ server_t *NewServer()
     server->peer_sock = -1;
     server->server_sock = -1;
     server->peer_mode = -1;
-    server->users = malloc(sizeof(user) * 10);
-    server->user_locations = malloc(sizeof(user_location) * 10);
     server->user_count = 0;
+    server->client_connections_count = 0;
     return server;
 }
 

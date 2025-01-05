@@ -32,3 +32,5 @@ void handle_error(char *msg);
 
 
 int gen_peer_id();
+
+int gen_client_id();
