@@ -130,7 +130,6 @@ int main(int argc, char **argv)
 			if (response.action == ERROR)
 			{
 				handle_error(response.payload);
-
 			}
 			else if (response.action == OK)
 			{
@@ -156,14 +155,26 @@ int main(int argc, char **argv)
 				printf("Current location: %s\n", response.payload);
 			}
 		}
-		else if (strcmp(command, "print") == 0)
+		else if (strncmp(command, "inspect ", 8) == 0)
 		{
-			struct response_t response = client_request_to_server(infraestructure->storage_sock, PRINTUSERS, "");
+			// UID LocId
+			char id[11];
+			int loc_id;
+			char filter[BUFSZ];
+			memset(filter, 0, BUFSZ);
+			sscanf(command + 8, "%s %d", id, &loc_id);
+			sprintf(filter, "%s %d", id, loc_id);
+			struct response_t response = client_request_to_server(infraestructure->location_sock, REQ_LOCLIST, filter);
 			if (response.action == ERROR)
 			{
 				handle_error(response.payload);
 			}
+			else
+			{
+				printf("Users in location %d: %s\n", loc_id, response.payload);
+			}
 		}
+
 		else
 		{
 			printf("Unknown command\n");

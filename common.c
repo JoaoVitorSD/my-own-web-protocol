@@ -103,11 +103,11 @@ int server_sockaddr_init(uint16_t port,
     return 0;
 }
 
-struct response_t parse_response(char *buffer)
+struct response_t extract_response(char *buffer)
 {
     int action_response;
     char *payload_response = malloc(BUFSZ);
-    sscanf(buffer, "%d %s", &action_response, payload_response);
+    parse_response(buffer, &action_response, payload_response);
     // printf("Received response: %d %s\n", action_response, payload_response);
     return (struct response_t){action_response, payload_response};
 }
@@ -125,8 +125,8 @@ struct response_t client_request_to_server(int socket, int action, char *payload
     memset(buffer, 0, BUFSZ);
     unsigned total = 0;
     recv(socket, buffer + total, BUFSZ - total - 1, 0);
-    // printf("Received: %s\n", buffer);
-    return parse_response(buffer);
+    printf("Received: %s\n", buffer);
+    return extract_response(buffer);
 }
 
 /**
@@ -139,7 +139,7 @@ struct response_t client_request_to_server(int socket, int action, char *payload
  * - Action: 33
  * - Payload: "1 1"
  */
-int parse_payload(char *raw, int *action, char *payload)
+int parse_response(char *raw, int *action, char *payload)
 {
  return sscanf(raw, "%d %[^\n]", action, payload);
 }

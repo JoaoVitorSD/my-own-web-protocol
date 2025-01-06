@@ -14,7 +14,6 @@
 #define MAX_USERS 30
 
 // Debug
-#define PRINTUSERS 1000
 // Data Messages
 #define REQ_USRADD 33
 #define REQ_USRACCESS 34
