@@ -9,7 +9,6 @@
 #include "time.h"
 #include <pthread.h>
 
-
 void usage(int argc, char **argv)
 {
     printf("usage: %s <peer-2-peer port> <connection port>\n", argv[0]);
@@ -182,7 +181,7 @@ void handle_peer_req(server_t *server, int peer_sock, char *clientInfo)
         printf("Peer %d disconnected\n", peer_sock);
         return;
     }
-  
+
     return_response(peer_sock, ERROR, clientInfo);
 }
 
@@ -194,7 +193,7 @@ user *NewUserFromPayload(char *payload)
     return newUser;
 }
 
-user * find_user_by_id(server_t *server, char *id)
+user *find_user_by_id(server_t *server, char *id)
 {
     for (int i = 0; i < server->user_count; i++)
     {
@@ -230,37 +229,53 @@ void *new_client_requests_handler_thread(void *arg)
             pthread_exit(NULL);
         }
 
-        handle_client_req(data->server, data->client_sock, buffer,data->client_id);
+        handle_client_req(data->server, data->client_sock, buffer, data->client_id);
     }
 
     return NULL;
 }
 
-void persist_user_location_in_location_peer(server_t * server, user * user, int loc_id)
+void persist_user_location_in_location_peer(server_t *server, user *user, int loc_id)
 {
     char payload[BUFSZ];
     sprintf(payload, "%s %d", user->id, loc_id);
     peer_request(server->peer_sock, REQ_LOCREG, payload);
 }
 
-void handle_peer_server_storage_req (server_t * server, char* rawPayload){
+void handle_peer_server_storage_req(server_t *server, char *rawPayload)
+{
 
     int action;
     char payload[BUFSZ];
     parse_payload(rawPayload, &action, payload);
     switch (action)
     {
-        case REQ_LOCREG:
-        {
-            printf("REQ_LOCREG %s\n", payload);
-            user_location *newUserLocation;
-            newUserLocation = malloc(sizeof(user_location));
-            int loc_id;
-            sscanf(payload, "%s %d", newUserLocation->id, &loc_id);
-            server->user_locations[loc_id-1] = newUserLocation;
-            peer_response(server->peer_sock, RES_LOCREG, integer_to_string(loc_id));
-            return;
-        }
+    case REQ_LOCREG:
+    {
+        printf("REQ_LOCREG %s\n", payload);
+        int loc_id;
+        char *id = malloc(10);
+        sscanf(payload, "%s %d", id, &loc_id);
+        // for(int i = 0; i < 30; i++)
+        // {
+        //     char user_id[10] = server->user_locations->users[loc_id-1][i];
+        //     if (strcmp(user_id, id) == 0)
+        //     {
+
+        //         peer_response(server->peer_sock, RES_LOCREG, integer_to_string(loc_id));
+        //         return;
+        //     }
+        // }
+        printf("Saving user %s in loc %d\n", id, loc_id);
+        user_location *location = server->user_locations[loc_id - 1];
+        int user_count = location->user_count;
+        printf("User count %d\n", user_count);
+        location->users[user_count] = id;
+        location->user_count = user_count + 1;
+      
+        peer_response(server->peer_sock, RES_LOCREG, integer_to_string(loc_id));
+        return;
+    }
     }
 }
 void handle_client_storage_req(server_t *server, int client_sock, int action, char *payload, int client_id)
@@ -273,6 +288,7 @@ void handle_client_storage_req(server_t *server, int client_sock, int action, ch
         user *existingUser = find_user_by_id(server, newUser->id);
         if (existingUser != NULL)
         {
+            printf("Updating user %s\n", newUser->id);
             existingUser->root = newUser->root;
             peer_request(server->peer_sock, REQ_USRADD, payload);
             return_response(client_sock, OK, SUCCESSFUL_UPDATE);
@@ -283,7 +299,7 @@ void handle_client_storage_req(server_t *server, int client_sock, int action, ch
             return_response(client_sock, ERROR, ERROR_USER_LIMIT_EXCEEDED);
             return;
         }
-        persist_user_location_in_location_peer(server, newUser, client_id);
+        persist_user_location_in_location_peer(server, newUser, server->client_locations[client_id - 1]);
         server->users[server->user_count] = newUser;
         server->user_count++;
         return_response(client_sock, OK, SUCCESSFUL_CREATE);
@@ -301,13 +317,50 @@ void handle_client_storage_req(server_t *server, int client_sock, int action, ch
     return_response(client_sock, ERROR, "Invalid action");
 }
 
+user *find_user_location_by_id(server_t *server, char *id)
+{
+    for (int i = 0; i < 10; i++)
+    {
+        for (int j = 0; j < 30; j++)
+        {
+            if (server->user_locations[i]->users[j] == NULL)
+            {
+                continue;
+            }
+            if (strcmp(server->user_locations[i]->users[j], id) == 0)
+            {
+                return server->user_locations[i]->users[j];
+            }
+        }
+    }
+    return NULL;
+}
 void handle_client_location_req(server_t *server, int client_sock, int action, char *payload, int client_id)
 {
 
-    switch(action)
+    switch (action)
     {
     case REQ_USRLOC:
-        printf("REQ_USRLOC %s\n", payload);
+        printf("Filtering user %s\n", payload);
+        for (int i = 0; i < CLIENTS_LOCATIONS; i++)
+        {
+            int users_amount = server->user_locations[i]->user_count;
+            for (int j = 0; j < users_amount; j++)
+            {
+                printf("Checking user index:%d value:%s, filter: %s\n", j, server->user_locations[i]->users[j],payload);
+                if (server->user_locations[i]->users[j] == NULL)
+                {
+                    continue;
+                }
+                if (strcmp(server->user_locations[i]->users[j], payload) == 0)
+                {
+                    printf("User %s found in location %d\n", payload, i + 1);
+                    return_response(client_sock, OK, integer_to_string(i + 1));
+                    return;
+                }
+            }
+        }
+        return_response(client_sock, ERROR, ERROR_USER_NOT_FOUND);
         return;
         /* code */
         break;
@@ -345,7 +398,7 @@ void handle_client_req(server_t *server, int client_sock, char *request, int cli
         handle_client_storage_req(server, client_sock, action, payload, client_id);
         break;
     case PEER_MODE_USER_LOCATIONS:
-        handle_client_location_req(server, client_sock, action, payload,client_id);
+        handle_client_location_req(server, client_sock, action, payload, client_id);
         break;
     default:
         fprintf(stderr, "Invalid peer mode\n");
@@ -380,7 +433,7 @@ void handle_inital_client_req(server_t *server, int client_sock, char *request)
         int loc_id;
         sscanf(payload, "%d", &loc_id);
         int client_id = ++server->client_connections_count;
-        server->client_connections[loc_id - 1] = client_id;
+        server->client_locations[client_id - 1] = loc_id;
         printf("Client %d added(Loc %d)\n", client_id, loc_id);
         server->client_sockets[client_id] = client_sock;
 
@@ -416,6 +469,19 @@ server_t *NewServer()
     server->user_count = 0;
     server->client_connections_count = 0;
     server->active_mode = 0;
+    server->user_locations = malloc(sizeof(user_location) * CLIENTS_LOCATIONS);
+    for (int i = 0; i < 30; i++)
+    {
+        server->users[i] = NULL;
+    }
+    for (int i = 0; i < 10; i++)
+    {
+        server->user_locations[i] = malloc(sizeof(user_location));
+        server->user_locations[i]->user_count = 0;
+        
+    }
+
+
     return server;
 }
 
@@ -452,13 +518,15 @@ int main(int argc, char **argv)
         {
             // Handle peer connection
             char peer_buffer[BUFSZ];
-            if(server->active_mode == 1)
+            if (server->active_mode == 1)
             {
                 int peerSock = accept_conncetion(server->server_sock, peer_buffer);
                 handle_peer_req(server, peerSock, peer_buffer);
-            }else{
+            }
+            else
+            {
                 recv(server->peer_sock, peer_buffer, BUFSZ - 1, 0);
-                handle_peer_server_storage_req(server,  peer_buffer);
+                handle_peer_server_storage_req(server, peer_buffer);
             }
         }
 

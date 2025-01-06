@@ -4,5 +4,6 @@
         "pthread.h": "c",
         "stdio.h": "c",
         "inet.h": "c"
-    }
+    },
+    "C_Cpp.errorSquiggles": "enabled"
 }

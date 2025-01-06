@@ -12,7 +12,8 @@ typedef struct
 
 typedef struct
 {
-    char id[10];
+    char *users[30];
+    int user_count;
 } user_location;
 
 typedef struct
@@ -25,8 +26,8 @@ typedef struct
     struct sockaddr_storage peer_storage;
     int user_count;
     user* users[30];
-    user_location* user_locations[10];
-    int client_connections[10];
+    user_location **user_locations;
+    int client_locations[10];
     int client_connections_count;
     int client_sockets[10];
     int active_mode;

@@ -125,6 +125,7 @@ struct response_t client_request_to_server(int socket, int action, char *payload
     memset(buffer, 0, BUFSZ);
     unsigned total = 0;
     recv(socket, buffer + total, BUFSZ - total - 1, 0);
+    // printf("Received: %s\n", buffer);
     return parse_response(buffer);
 }
 
@@ -161,6 +162,7 @@ void return_response(int socket, int action, char *payload)
         printf("Error sending response\n");
         logexit("send");
     }
+    // printf("Sent response: %s\n", buffer);
 }
 
 // 01 : ”Peer limit exceeded” 02 : ”Peer not found” 09 : ”Client limit exceeded” 10 : “Client not found” 17 : “User limit exceeded” 18 : “User not found” 19 : “Permission denied”

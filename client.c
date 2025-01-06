@@ -102,8 +102,8 @@ int main(int argc, char **argv)
 	printf("SU New Id: %d\n", infraestructure->client_id_storage);
 
 	// Connect to SL
-	// connect_to_server_and_return_client_id(server_ip, server_location_port, loc_id, &location_sock, &client_id_location);
-	// printf("SL New Id: %d\n", client_id_location);
+	connect_to_server_and_return_client_id(infraestructure, PEER_MODE_USER_LOCATIONS);
+	printf("SL New Id: %d\n", infraestructure->client_id_location);
 
 	char command[BUFSZ];
 	while (1)
@@ -146,7 +146,7 @@ int main(int argc, char **argv)
 			char uid[11];
 			sscanf(command + 5, "%10s", uid);
 			struct response_t response = client_request_to_server(infraestructure->location_sock, REQ_USRLOC, uid);
-
+			printf("User %s is in location %s\n", uid, response.payload);
 			if (response.action == ERROR)
 			{
 				handle_error(response.payload);
