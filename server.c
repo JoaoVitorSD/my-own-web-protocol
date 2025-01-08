@@ -163,6 +163,8 @@ void handle_peer_req(server_t *server, int peer_sock, char *clientInfo)
         server->peer_sock = peer_sock;
         printf("Peer %d connected\n", peer_id);
         struct response_t response = peer_request(peer_sock, RES_CONNPEER, integer_to_string(peer_id));
+        server->server_id = atoi(response.payload);
+        printf("New Peer ID: %d\n", server->server_id);
         return;
     }
     if (action == REQ_DISCPEER)
