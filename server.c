@@ -252,6 +252,7 @@ int *find_user_location_and_index_in_sl(server_t *server, char *id)
     result[1] = NULL;
     for (int i = 0; i < CLIENTS_LOCATIONS; i++)
     {
+        printf("Checking location %d\n", i + 1);
         for (int j = 0; j < MAX_USERS; j++)
         {
             if (server->user_locations[i]->users[j] == NULL)
@@ -262,7 +263,7 @@ int *find_user_location_and_index_in_sl(server_t *server, char *id)
             {
                 result[0] = i + 1;
                 result[1] = j;
-                break;
+                return result;
             }
         }
     }
@@ -418,23 +419,22 @@ void handle_client_location_req(server_t *server, int client_sock, int action, c
     switch (action)
     {
     case REQ_USRLOC:
-        printf("Filtering user %s\n", payload);
+        printf("REQ_USRLOC %s\n", payload);
         int *oldLocation = find_user_location_and_index_in_sl(server, payload);
         int loc_id = oldLocation[0];
-        if (loc_id != -1)
+        if (loc_id != NULL)
         {
             return_response(client_sock, RES_USRLOC, integer_to_string(loc_id));
             return;
         }
         return_response(client_sock, ERROR, ERROR_USER_NOT_FOUND);
         return;
-        break;
     case REQ_LOCLIST:
         char locList[BUFSZ];
+        printf("REQ_LOCLIST %s", payload);
         memset(locList, 0, BUFSZ);
         char *user_id = malloc(10);
         sscanf(payload, "%s %d", user_id, &loc_id);
-        printf("REQ_LOCLIST %s %d\n", user_id, &loc_id);
         // FIXME REQ_USRAUTH to SU and check is root
         // if (find_user_location_in_sl(server, user_id) ==-1)
         // {
