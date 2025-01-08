@@ -244,15 +244,15 @@ struct response_t persist_user_location_in_location_peer(server_t *server, user 
     return peer_request(server->peer_sock, REQ_LOCREG, payload);
 }
 
-int* find_user_location_and_index_in_sl(server_t *server, char *id)
+// Returns an array with user location and respective index in array
+int *find_user_location_and_index_in_sl(server_t *server, char *id)
 {
-    int *result= malloc(sizeof(int) * 2);
-    result[0] = -1;
-    result[1] = -1;
+    int *result = malloc(sizeof(int) * 2);
+    result[0] = NULL;
+    result[1] = NULL;
     for (int i = 0; i < CLIENTS_LOCATIONS; i++)
     {
-        int users_amount = server->user_locations[i]->user_count;
-        for (int j = 0; j < users_amount; j++)
+        for (int j = 0; j < MAX_USERS; j++)
         {
             if (server->user_locations[i]->users[j] == NULL)
             {
@@ -264,6 +264,20 @@ int* find_user_location_and_index_in_sl(server_t *server, char *id)
                 result[1] = j;
                 break;
             }
+        }
+    }
+    // Checking users outside
+    for (int i = 0; i < MAX_USERS; i++)
+    {
+        if (server->users_outside[i] == NULL)
+        {
+            continue;
+        }
+        if (strcmp(server->users_outside[i], id) == 0)
+        {
+            result[0] = -1;
+            result[1] = i;
+            break;
         }
     }
     return result;
@@ -283,31 +297,54 @@ void handle_peer_server_storage_req(server_t *server, char *rawPayload)
         int loc_id;
         char *id = malloc(10);
         sscanf(payload, "%s %d", id, &loc_id);
-        int * oldLocation = malloc(sizeof(int) * 2);
+        int *oldLocation = malloc(sizeof(int) * 2);
         oldLocation = find_user_location_and_index_in_sl(server, id);
-        user_location *newLocation = server->user_locations[loc_id - 1];
-        if (oldLocation[0] == -1)
+        char **newUserLocationArray = loc_id == -1 ? server->users_outside : server->user_locations[loc_id - 1]->users;
+        if (oldLocation[0] == NULL)
         {
-            int user_count = newLocation->user_count;
-            printf("User count %d\n", user_count);
-            newLocation->users[user_count] = id;
-            newLocation->user_count++;
+            put_user_in_location(newUserLocationArray, id);
             peer_response(server->peer_sock, RES_LOCREG, "-1");
             return;
         }
-        if(loc_id == -1){
-            // TODO trocar para lista encadeada
-            server->users_outside[server->user_count] = id;
-        }
-        user_location *oldLocationData = server->user_locations[oldLocation[0] - 1];
-        oldLocationData->user_count--;
-        oldLocationData->users[oldLocation[1]] = NULL;
-        newLocation->users[newLocation->user_count++] = id;
+        char **oldUserLocationArray = oldLocation[0] == -1 ? server->users_outside : server->user_locations[oldLocation[0] - 1]->users;
+        put_user_outside_location(oldUserLocationArray, id);
+        free(oldLocation);
+        put_user_in_location(newUserLocationArray, id);
         peer_response(server->peer_sock, RES_LOCREG, integer_to_string(oldLocation[0]));
-        return;	
+        return;
     }
     }
 }
+void put_user_in_location(char **users_locations, char *id)
+{
+    for (int i = 0; i < MAX_USERS; i++)
+    {
+        if (users_locations[i] == NULL)
+        {
+            users_locations[i] = id;
+            return;
+        }
+    }
+    return;
+}
+
+void put_user_outside_location(char **users_locations, char *id)
+{
+    for (int i = 0; i < MAX_USERS; i++)
+    {
+        if (users_locations[i] == NULL)
+        {
+            continue;
+        }
+        if (strcmp(users_locations[i], id) == 0)
+        {
+            users_locations[i] = NULL;
+            return;
+        }
+    }
+    return;
+}
+
 void handle_client_storage_req(server_t *server, int client_sock, int action, char *payload, int client_id)
 {
 
@@ -338,7 +375,7 @@ void handle_client_storage_req(server_t *server, int client_sock, int action, ch
 
     if (action == REQ_USRACCESS)
     {
-        char *direction = malloc(4), *id= malloc(10);
+        char *direction = malloc(4), *id = malloc(10);
         sscanf(payload, "%s %s", direction, id);
         printf("REQ_USRACCESS %s %s\n", id, direction);
         user *existingUser = find_user_by_id(server, id);
@@ -406,15 +443,23 @@ void handle_client_location_req(server_t *server, int client_sock, int action, c
         //     return;
         // }
         user_location *location = server->user_locations[loc_id - 1];
-        for (int i = 0; i < location->user_count; i++)
+        int lastIndex = 0;
+        for (int i = 0; i < MAX_USERS; i++)
         {
             if (location->users[i] == NULL)
             {
                 continue;
             }
-            printf("User %s\n", location->users[i]);
+            lastIndex = i;
+        }
+        for (int i = 0; i <= lastIndex; i++)
+        {
+            if (location->users[i] == NULL)
+            {
+                continue;
+            }
             strcat(locList, location->users[i]);
-            if (i != location->user_count - 1)
+            if (i != lastIndex)
             {
                 strcat(locList, ", ");
             }
@@ -474,7 +519,7 @@ void handle_inital_client_req(server_t *server, int client_sock, char *request)
         sscanf(payload, "%d", &loc_id);
         int client_id = ++server->client_connections_count;
         server->client_locations[client_id - 1] = loc_id;
-        server->client_sockets[client_id-1] = client_sock;
+        server->client_sockets[client_id - 1] = client_sock;
         printf("Client %d added(Loc %d)\n", client_id, loc_id);
 
         // Initialize thread data for client request
@@ -510,7 +555,7 @@ server_t *NewServer()
     server->client_connections_count = 0;
     server->active_mode = 0;
     server->user_locations = malloc(sizeof(user_location) * CLIENTS_LOCATIONS);
-    server->users_outside = malloc(sizeof(char) *30*10);
+    server->users_outside = malloc(sizeof(char) * 30 * 10);
     for (int i = 0; i < 30; i++)
     {
         server->users[i] = NULL;
@@ -518,7 +563,6 @@ server_t *NewServer()
     for (int i = 0; i < 10; i++)
     {
         server->user_locations[i] = malloc(sizeof(user_location));
-        server->user_locations[i]->user_count = 0;
     }
 
     return server;

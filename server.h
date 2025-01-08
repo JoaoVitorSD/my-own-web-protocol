@@ -10,10 +10,10 @@ typedef struct
     unsigned root;
 } user;
 
+
 typedef struct
 {
     char *users[30];
-    int user_count;
 } user_location;
 
 typedef struct
