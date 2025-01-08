@@ -237,11 +237,36 @@ void *new_client_requests_handler_thread(void *arg)
     return NULL;
 }
 
-void persist_user_location_in_location_peer(server_t *server, user *user, int loc_id)
+struct response_t persist_user_location_in_location_peer(server_t *server, user *user, int loc_id)
 {
     char payload[BUFSZ];
     sprintf(payload, "%s %d", user->id, loc_id);
-    peer_request(server->peer_sock, REQ_LOCREG, payload);
+    return peer_request(server->peer_sock, REQ_LOCREG, payload);
+}
+
+int* find_user_location_and_index_in_sl(server_t *server, char *id)
+{
+    int *result= malloc(sizeof(int) * 2);
+    result[0] = -1;
+    result[1] = -1;
+    for (int i = 0; i < CLIENTS_LOCATIONS; i++)
+    {
+        int users_amount = server->user_locations[i]->user_count;
+        for (int j = 0; j < users_amount; j++)
+        {
+            if (server->user_locations[i]->users[j] == NULL)
+            {
+                continue;
+            }
+            if (strcmp(server->user_locations[i]->users[j], id) == 0)
+            {
+                result[0] = i + 1;
+                result[1] = j;
+                break;
+            }
+        }
+    }
+    return result;
 }
 
 void handle_peer_server_storage_req(server_t *server, char *rawPayload)
@@ -258,25 +283,28 @@ void handle_peer_server_storage_req(server_t *server, char *rawPayload)
         int loc_id;
         char *id = malloc(10);
         sscanf(payload, "%s %d", id, &loc_id);
-        // for(int i = 0; i < 30; i++)
-        // {
-        //     char user_id[10] = server->user_locations->users[loc_id-1][i];
-        //     if (strcmp(user_id, id) == 0)
-        //     {
-
-        //         peer_response(server->peer_sock, RES_LOCREG, integer_to_string(loc_id));
-        //         return;
-        //     }
-        // }
-        printf("Saving user %s in loc %d\n", id, loc_id);
-        user_location *location = server->user_locations[loc_id - 1];
-        int user_count = location->user_count;
-        printf("User count %d\n", user_count);
-        location->users[user_count] = id;
-        location->user_count++;
-
-        peer_response(server->peer_sock, RES_LOCREG, integer_to_string(loc_id));
-        return;
+        int * oldLocation = malloc(sizeof(int) * 2);
+        oldLocation = find_user_location_and_index_in_sl(server, id);
+        user_location *newLocation = server->user_locations[loc_id - 1];
+        if (oldLocation[0] == -1)
+        {
+            int user_count = newLocation->user_count;
+            printf("User count %d\n", user_count);
+            newLocation->users[user_count] = id;
+            newLocation->user_count++;
+            peer_response(server->peer_sock, RES_LOCREG, "-1");
+            return;
+        }
+        if(loc_id == -1){
+            // TODO trocar para lista encadeada
+            server->users_outside[server->user_count] = id;
+        }
+        user_location *oldLocationData = server->user_locations[oldLocation[0] - 1];
+        oldLocationData->user_count--;
+        oldLocationData->users[oldLocation[1]] = NULL;
+        newLocation->users[newLocation->user_count++] = id;
+        peer_response(server->peer_sock, RES_LOCREG, integer_to_string(oldLocation[0]));
+        return;	
     }
     }
 }
@@ -301,10 +329,27 @@ void handle_client_storage_req(server_t *server, int client_sock, int action, ch
             return_response(client_sock, ERROR, ERROR_USER_LIMIT_EXCEEDED);
             return;
         }
-        persist_user_location_in_location_peer(server, newUser, server->client_locations[client_id - 1]);
+
         server->users[server->user_count] = newUser;
         server->user_count++;
         return_response(client_sock, OK, SUCCESSFUL_CREATE);
+        return;
+    }
+
+    if (action == REQ_USRACCESS)
+    {
+        char *direction = malloc(4), *id= malloc(10);
+        sscanf(payload, "%s %s", direction, id);
+        printf("REQ_USRACCESS %s %s\n", id, direction);
+        user *existingUser = find_user_by_id(server, id);
+        if (existingUser != NULL)
+        {
+            int locId = strcmp(direction, "out") == 0 ? -1 : server->client_locations[client_id - 1];
+            struct response_t response = persist_user_location_in_location_peer(server, existingUser, locId);
+            return_response(client_sock, RES_USRACCESS, response.payload);
+            return;
+        }
+        return_response(client_sock, ERROR, ERROR_USER_NOT_FOUND);
         return;
     }
 
@@ -330,26 +375,6 @@ user *find_user_location_in_su_by_id(server_t *server, char *id)
     return NULL;
 }
 
-int find_user_location_in_sl(server_t *server, char *id)
-{
-    for (int i = 0; i < CLIENTS_LOCATIONS; i++)
-    {
-        int users_amount = server->user_locations[i]->user_count;
-        for (int j = 0; j < users_amount; j++)
-        {
-            if (server->user_locations[i]->users[j] == NULL)
-            {
-                continue;
-            }
-            if (strcmp(server->user_locations[i]->users[j], id) == 0)
-            {
-                printf("User %s found in location %d\n", id, i + 1);
-                return i + 1;
-            }
-        }
-    }
-    return -1;
-}
 void handle_client_location_req(server_t *server, int client_sock, int action, char *payload, int client_id)
 {
 
@@ -357,7 +382,8 @@ void handle_client_location_req(server_t *server, int client_sock, int action, c
     {
     case REQ_USRLOC:
         printf("Filtering user %s\n", payload);
-        int loc_id = find_user_location_in_sl(server, payload);
+        int *oldLocation = find_user_location_and_index_in_sl(server, payload);
+        int loc_id = oldLocation[0];
         if (loc_id != -1)
         {
             return_response(client_sock, RES_USRLOC, integer_to_string(loc_id));
@@ -371,7 +397,7 @@ void handle_client_location_req(server_t *server, int client_sock, int action, c
         memset(locList, 0, BUFSZ);
         char *user_id = malloc(10);
         sscanf(payload, "%s %d", user_id, &loc_id);
-        printf("REQ_LOCLIST %s %d\n", user_id, loc_id);
+        printf("REQ_LOCLIST %s %d\n", user_id, &loc_id);
         // FIXME REQ_USRAUTH to SU and check is root
         // if (find_user_location_in_sl(server, user_id) ==-1)
         // {
@@ -448,8 +474,8 @@ void handle_inital_client_req(server_t *server, int client_sock, char *request)
         sscanf(payload, "%d", &loc_id);
         int client_id = ++server->client_connections_count;
         server->client_locations[client_id - 1] = loc_id;
+        server->client_sockets[client_id-1] = client_sock;
         printf("Client %d added(Loc %d)\n", client_id, loc_id);
-        server->client_sockets[client_id] = client_sock;
 
         // Initialize thread data for client request
         client_thread_data_t *thread_data = malloc(sizeof(client_thread_data_t));
@@ -484,6 +510,7 @@ server_t *NewServer()
     server->client_connections_count = 0;
     server->active_mode = 0;
     server->user_locations = malloc(sizeof(user_location) * CLIENTS_LOCATIONS);
+    server->users_outside = malloc(sizeof(char) *30*10);
     for (int i = 0; i < 30; i++)
     {
         server->users[i] = NULL;

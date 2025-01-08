@@ -133,11 +133,18 @@ int main(int argc, char **argv)
 			}
 			else if (response.action == OK)
 			{
-				printf("User updated: %s\n", uid);
-			}
-			else
-			{
-				printf("New user added: %s\n", uid);
+				if (strcmp(response.payload, SUCCESSFUL_CREATE) == 0)
+				{
+					printf("New user added: %s\n", uid);
+				}
+				else if (strcmp(response.payload, SUCCESSFUL_UPDATE) == 0)
+				{
+					printf("User updated: %s\n", uid);
+				}
+				else
+				{
+					printf("Invalid response\n");
+				}
 			}
 		}
 		else if (strncmp(command, "find ", 5) == 0)
@@ -153,6 +160,25 @@ int main(int argc, char **argv)
 			else
 			{
 				printf("Current location: %s\n", response.payload);
+			}
+		}
+		else if (strncmp(command, "in ", 3) == 0 || strncmp(command, "out ", 4) == 0)
+		{
+			char uid[11];
+			char action[4];
+			sscanf(command, "%s %s", action, uid);
+			char payload[BUFSZ];
+			memset(payload, 0, BUFSZ);
+			sprintf(payload, "%s %s", action, uid);
+			printf("Payload: %s\n", payload);
+			struct response_t response = client_request_to_server(infraestructure->storage_sock, REQ_USRACCESS, payload);
+			if (response.action == ERROR)
+			{
+				handle_error(response.payload);
+			}
+			else
+			{
+				printf("Ok. Last location: %s\n", response.payload);
 			}
 		}
 		else if (strncmp(command, "inspect ", 8) == 0)

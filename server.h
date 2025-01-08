@@ -27,6 +27,7 @@ typedef struct
     int user_count;
     user* users[30];
     user_location **user_locations;
+    char** users_outside;
     int client_locations[10];
     int client_connections_count;
     int client_sockets[10];
