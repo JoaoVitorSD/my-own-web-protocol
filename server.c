@@ -252,7 +252,6 @@ int *find_user_location_and_index_in_sl(server_t *server, char *id)
     result[1] = NULL;
     for (int i = 0; i < CLIENTS_LOCATIONS; i++)
     {
-        printf("Checking location %d\n", i + 1);
         for (int j = 0; j < MAX_USERS; j++)
         {
             if (server->user_locations[i]->users[j] == NULL)
@@ -307,11 +306,12 @@ void handle_peer_server_storage_req(server_t *server, char *rawPayload)
             peer_response(server->peer_sock, RES_LOCREG, "-1");
             return;
         }
+        printf("Old Location: %d\n", oldLocation[0]);
         char **oldUserLocationArray = oldLocation[0] == -1 ? server->users_outside : server->user_locations[oldLocation[0] - 1]->users;
         put_user_outside_location(oldUserLocationArray, id);
-        free(oldLocation);
         put_user_in_location(newUserLocationArray, id);
         peer_response(server->peer_sock, RES_LOCREG, integer_to_string(oldLocation[0]));
+        free(oldLocation);
         return;
     }
     }
