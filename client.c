@@ -79,7 +79,7 @@ int connect_to_server_and_return_client_id(struct infraestructure_t *infraestruc
 	return *client_id;
 }
 
-void disconnect_from_server(int server_sock, int client_id)
+void disconnect_from_server(int server_sock, int client_id, char * mode)
 {
 	char payload[BUFSZ];
 	snprintf(payload, BUFSZ, "%d", client_id);
@@ -90,7 +90,7 @@ void disconnect_from_server(int server_sock, int client_id)
 		handle_error(response.payload);
 	}
 
-	printf("Successful disconnect\n");
+	printf("%s Successful disconnect\n", mode);
 	close(server_sock);
 }
 
@@ -113,8 +113,8 @@ int main(int argc, char **argv)
 		command[strcspn(command, "\n")] = '\0'; // Remove newline character
 		if (strcmp(command, "kill") == 0)
 		{
-			// disconnect_from_server(storage_sock, client_id_storage);
-			// disconnect_from_server(location_sock, client_id_location);
+			disconnect_from_server(infraestructure->storage_sock, infraestructure->client_id_storage, "SU");
+			disconnect_from_server(infraestructure->location_sock, infraestructure->client_id_location, "SL");
 			break;
 		}
 		else if (strncmp(command, "add ", 4) == 0)

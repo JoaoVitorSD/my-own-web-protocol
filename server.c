@@ -358,8 +358,6 @@ void handle_peer_server_location_req(server_t *server, char *rawPayload)
     peer_response(server->peer_sock, ERROR, "Invalid action");
 }
 
-
-
 void put_user_outside_location(char **users_locations, char *id)
 {
     for (int i = 0; i < MAX_USERS; i++)
@@ -420,6 +418,15 @@ void handle_client_storage_req(server_t *server, int client_sock, int action, ch
         return;
     }
 
+    if (action == REQ_DISC)
+    {
+        printf("REQ_DISC\n");
+        server->client_locations[client_id - 1] = -1;
+        server->client_sockets[client_id - 1] = -1;
+        server->client_connections_count--;
+        return_response(client_sock, OK, SUCCESSFUL_DISCONNECTED);
+        return;
+    }
     return_response(client_sock, ERROR, "Invalid action");
 }
 
@@ -442,6 +449,20 @@ user *find_user_location_in_su_by_id(server_t *server, char *id)
     return NULL;
 }
 
+void disconnect_client(server_t *server, int client_sock, int client_id)
+{
+    printf("REQ_DISC\n");
+    if (server->client_locations[client_id - 1] == -1)
+    {
+        return_response(client_sock, ERROR, ERROR_CLIENT_NOT_FOUND);
+        return;
+    }
+    printf("Client %d removed (Loc %d)\n", client_id, server->client_locations[client_id - 1]);
+    server->client_locations[client_id - 1] = -1;
+    server->client_sockets[client_id - 1] = -1;
+    server->client_connections_count--;
+    return_response(client_sock, OK, SUCCESSFUL_DISCONNECTED);
+}
 void handle_client_location_req(server_t *server, int client_sock, int action, char *payload, int client_id)
 {
 
@@ -494,8 +515,10 @@ void handle_client_location_req(server_t *server, int client_sock, int action, c
                 strcat(locList, ", ");
             }
         }
-        printf("List of users in location %d: %s\n", loc_id, locList);
         return_response(client_sock, RES_LOCLIST, locList);
+        return;
+    case REQ_DISC:
+        disconnect_client(server, client_sock, client_id);
         return;
     default:
         break;
@@ -633,7 +656,8 @@ int main(int argc, char **argv)
             char peer_buffer[BUFSZ];
             int peerSock = accept_conncetion(server->server_sock, peer_buffer);
             handle_peer_req(server, peerSock, peer_buffer);
-            if(server->peer_sock!=-1){
+            if (server->peer_sock != -1)
+            {
                 FD_SET(server->peer_sock, &master_set);
                 fdmax = (server->peer_sock > fdmax) ? server->peer_sock : fdmax;
             }
@@ -664,7 +688,7 @@ int main(int argc, char **argv)
             }
             else if (server->peer_mode == PEER_MODE_USER_STORAGE)
             {
-                handle_peer_server_storage_req(server,buffer);
+                handle_peer_server_storage_req(server, buffer);
             }
         }
     }
