@@ -32,6 +32,7 @@ typedef struct
     int client_connections_count;
     int client_sockets[10];
     int active_mode;
+    int awaiting_peer_response;
 } server_t;
 
 #endif

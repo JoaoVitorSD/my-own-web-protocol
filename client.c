@@ -168,8 +168,7 @@ int main(int argc, char **argv)
 			sscanf(command, "%s %s", action, uid);
 			char payload[BUFSZ];
 			memset(payload, 0, BUFSZ);
-			sprintf(payload, "%s %s", action, uid);
-			printf("Payload: %s\n", payload);
+			sprintf(payload, "%s %s", uid,action);
 			struct response_t response = client_request_to_server(infraestructure->storage_sock, REQ_USRACCESS, payload);
 			if (response.action == ERROR)
 			{
@@ -182,8 +181,6 @@ int main(int argc, char **argv)
 		}
 		else if (strncmp(command, "inspect ", 8) == 0)
 		{
-			// UID LocId
-			printf("Inspecting %s \n", command);
 			char *id = malloc(11);
 			int loc_id;
 			char filter[BUFSZ];

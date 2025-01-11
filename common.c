@@ -6,7 +6,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-
+#include <time.h>
 void logexit(const char *msg)
 {
     perror(msg);
@@ -170,23 +170,23 @@ void handle_error(char *message)
 {
     if (0 == strcmp(message, ERROR_PEER_LIMIT_EXCEEDED))
     {
-        printf("Error: Peer limit exceeded\n");
+        printf("Peer limit exceeded\n");
         exit(EXIT_FAILURE);
     }
     else if (0 == strcmp(message, ERROR_PEER_NOT_FOUND))
-        printf("Error: Peer not found\n");
+        printf("Peer not found\n");
     else if (0 == strcmp(message, ERROR_CLIENT_LIMIT_EXCEEDED))
-        printf("Error: Client limit exceeded\n");
+        printf("Client limit exceeded\n");
     else if (0 == strcmp(message, ERROR_CLIENT_NOT_FOUND))
-        printf("Error: Client not found\n");
+        printf("Client not found\n");
     else if (0 == strcmp(message, ERROR_USER_LIMIT_EXCEEDED))
-        printf("Error: User limit exceeded\n");
+        printf("User limit exceeded\n");
     else if (0 == strcmp(message, ERROR_USER_NOT_FOUND))
-        printf("Error: User not found\n");
+        printf("User not found\n");
     else if (0 == strcmp(message, ERROR_PERMISSION_DENIED))
-        printf("Error: Permission denied\n");
+        printf("Permission denied\n");
     else
-        printf("Error: Unknown error %s\n", message);
+        printf("Unknown error %s\n", message);
 }
 
 int gen_peer_id()
