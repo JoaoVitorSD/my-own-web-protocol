@@ -125,7 +125,6 @@ struct response_t client_request_to_server(int socket, int action, char *payload
     memset(buffer, 0, BUFSZ);
     unsigned total = 0;
     recv(socket, buffer + total, BUFSZ - total - 1, 0);
-    printf("Received: %s\n", buffer);
     return extract_response(buffer);
 }
 
@@ -192,6 +191,7 @@ void handle_error(char *message)
 
 int gen_peer_id()
 {
+    srand(time(0));
     return 1 + rand() % 100000;
 }
 

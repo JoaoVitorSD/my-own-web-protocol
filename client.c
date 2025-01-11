@@ -152,7 +152,6 @@ int main(int argc, char **argv)
 			char uid[11];
 			sscanf(command + 5, "%10s", uid);
 			struct response_t response = client_request_to_server(infraestructure->location_sock, REQ_USRLOC, uid);
-			printf("User %s is in location %s\n", uid, response.payload);
 			if (response.action == ERROR)
 			{
 				handle_error(response.payload);
@@ -184,12 +183,13 @@ int main(int argc, char **argv)
 		else if (strncmp(command, "inspect ", 8) == 0)
 		{
 			// UID LocId
-			char id[11];
+			printf("Inspecting %s \n", command);
+			char *id = malloc(11);
 			int loc_id;
 			char filter[BUFSZ];
-			memset(filter, 0, BUFSZ);
 			sscanf(command + 8, "%s %d", id, &loc_id);
 			sprintf(filter, "%s %d", id, loc_id);
+			printf("Filter: %s\n", filter);
 			struct response_t response = client_request_to_server(infraestructure->location_sock, REQ_LOCLIST, filter);
 			if (response.action == ERROR)
 			{
@@ -197,7 +197,7 @@ int main(int argc, char **argv)
 			}
 			else
 			{
-				printf("Users in location %d: %s\n", loc_id, response.payload);
+				printf("List of people at the specified location: %s\n", response.payload);
 			}
 		}
 
