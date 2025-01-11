@@ -38,7 +38,6 @@ void *new_client_requests_handler_thread(void *arg)
             free(data);
             pthread_exit(NULL);
         }
-        printf("Received: %s\n", buffer);
         handle_client_req(data->server, data->sock, buffer, data->id);
     }
 
@@ -400,7 +399,6 @@ void handle_client_storage_req(server_t *server, int client_sock, int action, ch
         {
             printf("Updating user %s\n", newUser->id);
             existingUser->root = newUser->root;
-            // peer_request(server->peer_sock, REQ_USRADD, payload);
             return_response(client_sock, OK, SUCCESSFUL_UPDATE);
             return;
         }
@@ -480,8 +478,8 @@ void handle_client_location_req(server_t *server, int client_sock, int action, c
         char *user_id = malloc(10);
         sscanf(payload, "%s %d", user_id, &loc_id);
         struct response_t auth_response = peer_request(server->peer_sock, REQ_USRAUTH, user_id);
-        int user_is_root = atoi(auth_response.payload);
-        if (user_is_root == 0){
+        int is_special = atoi(auth_response.payload);
+        if (is_special != 1){
             return_response(client_sock, ERROR, ERROR_PERMISSION_DENIED);
             return;
         }

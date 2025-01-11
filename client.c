@@ -189,7 +189,6 @@ int main(int argc, char **argv)
 			char filter[BUFSZ];
 			sscanf(command + 8, "%s %d", id, &loc_id);
 			sprintf(filter, "%s %d", id, loc_id);
-			printf("Filter: %s\n", filter);
 			struct response_t response = client_request_to_server(infraestructure->location_sock, REQ_LOCLIST, filter);
 			if (response.action == ERROR)
 			{
