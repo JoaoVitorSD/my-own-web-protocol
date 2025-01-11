@@ -195,7 +195,14 @@ int gen_peer_id()
     return 1 + rand() % 100000;
 }
 
-int gen_client_id()
+int gen_client_id(int client_locations[MAX_CLIENT_CONNECTIONS])
 {
-    return rand() % 100000;
+    for (int i = 0; i < MAX_CLIENT_CONNECTIONS; i++)
+    {
+        if (client_locations[i] == -1)
+        {
+            return i + 1;
+        }
+    }
+    return -1;
 }

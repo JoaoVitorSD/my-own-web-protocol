@@ -420,11 +420,7 @@ void handle_client_storage_req(server_t *server, int client_sock, int action, ch
 
     if (action == REQ_DISC)
     {
-        printf("REQ_DISC\n");
-        server->client_locations[client_id - 1] = -1;
-        server->client_sockets[client_id - 1] = -1;
-        server->client_connections_count--;
-        return_response(client_sock, OK, SUCCESSFUL_DISCONNECTED);
+        disconnect_client(server, client_sock, client_id);
         return;
     }
     return_response(client_sock, ERROR, "Invalid action");
@@ -563,15 +559,14 @@ void handle_inital_client_req(server_t *server, int client_sock, char *request)
 
     if (action == REQ_CONN)
     {
-        if (server->client_connections_count >= MAX_CLIENT_CONNECTIONS)
+        int client_id = gen_client_id(server->client_locations);
+        if (client_id == -1)
         {
             return_response(client_sock, ERROR, ERROR_CLIENT_LIMIT_EXCEEDED);
             return;
         }
-
         int loc_id;
         sscanf(payload, "%d", &loc_id);
-        int client_id = ++server->client_connections_count;
         server->client_locations[client_id - 1] = loc_id;
         server->client_sockets[client_id - 1] = client_sock;
         printf("Client %d added(Loc %d)\n", client_id, loc_id);
@@ -616,6 +611,8 @@ server_t *NewServer()
     }
     for (int i = 0; i < 10; i++)
     {
+        server->client_locations[i] = -1;
+        server->client_sockets[i] = -1;
         server->user_locations[i] = malloc(sizeof(user_location));
     }
 

@@ -28,9 +28,9 @@ typedef struct
     user* users[30];
     user_location **user_locations;
     char** users_outside;
-    int client_locations[10];
+    int client_locations[MAX_CLIENT_CONNECTIONS];
     int client_connections_count;
-    int client_sockets[10];
+    int client_sockets[MAX_CLIENT_CONNECTIONS];
     int active_mode;
     int awaiting_peer_response;
 } server_t;

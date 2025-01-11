@@ -74,6 +74,7 @@ int connect_to_server_and_return_client_id(struct infraestructure_t *infraestruc
 	if (response.action == ERROR)
 	{
 		handle_error(response.payload);
+		exit(1);
 	}
 	sscanf(response.payload, "%d", client_id);
 	return *client_id;
