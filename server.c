@@ -14,39 +14,10 @@ void usage(int argc, char **argv)
     printf("usage: %s <peer-2-peer port> <connection port>\n", argv[0]);
     printf("example: %s 40000 50000\n", argv[0]);
     exit(EXIT_FAILURE);
-}
-// THREADS SECTIONS
-typedef struct
-{
-    server_t *server;
-    int sock;
-    int id;
-} connection_thread_t;
-
-void *new_client_requests_handler_thread(void *arg)
-{
-    connection_thread_t *data = (connection_thread_t *)arg;
-    char buffer[BUFSZ];
-    while (1)
-    {
-        memset(buffer, 0, BUFSZ);
-        ssize_t received = recv(data->sock, buffer, BUFSZ - 1, 0);
-
-        if (received <= 0)
-        {
-            close(data->sock);
-            free(data);
-            pthread_exit(NULL);
-        }
-        handle_client_req(data->server, data->sock, buffer, data->id);
-    }
-
     return NULL;
 }
 
-// END THREADS SECTIONS
-
-// ARRAY UTILS
+// Server utils - Funções de manipulação de dados do servidor
 void put_user_in_location(char **users_locations, char *id)
 {
     for (int i = 0; i < MAX_USERS; i++)
@@ -60,7 +31,57 @@ void put_user_in_location(char **users_locations, char *id)
     return;
 }
 
-// END ARRAY UTILS
+void put_user_outside_location(char **users_locations, char *id)
+{
+    for (int i = 0; i < MAX_USERS; i++)
+    {
+        if (users_locations[i] == NULL)
+        {
+            continue;
+        }
+        if (strcmp(users_locations[i], id) == 0)
+        {
+            users_locations[i] = NULL;
+            return;
+        }
+    }
+    return;
+}
+
+void disconnect_client(server_t *server, int client_sock, int client_id)
+{
+    printf("REQ_DISC\n");
+    if (server->client_locations[client_id - 1] == -1)
+    {
+        return_response(client_sock, ERROR, ERROR_CLIENT_NOT_FOUND);
+        return;
+    }
+    printf("Client %d removed (Loc %d)\n", client_id, server->client_locations[client_id - 1]);
+    server->client_locations[client_id - 1] = -1;
+    server->client_sockets[client_id - 1] = -1;
+    server->client_connections_count--;
+    return_response(client_sock, OK, SUCCESSFUL_DISCONNECTED);
+}
+
+user *NewUserFromPayload(char *payload)
+{
+    user *newUser;
+    newUser = malloc(sizeof(user));
+    sscanf(payload, "%s %d", newUser->id, &newUser->root);
+    return newUser;
+}
+
+user *find_user_by_id(server_t *server, char *id)
+{
+    for (int i = 0; i < server->user_count; i++)
+    {
+        if (strcmp(server->users[i]->id, id) == 0)
+        {
+            return server->users[i];
+        }
+    }
+    return NULL;
+}
 
 struct response_t peer_request(server_t *server, int action, char *payload)
 {
@@ -130,6 +151,7 @@ int init_server(char *port, struct sockaddr_storage *storage)
     }
 
     listen_to_socket(s, storage);
+
     return s;
 }
 
@@ -149,165 +171,80 @@ int accept_conncetion(int socket, char *buffer)
     return csock;
 }
 
-void init_peer_connection_and_setup_server_conf(char *peerPort, server_t *server)
-{
-    struct sockaddr_storage storage;
-    if (0 != addrparse("127.0.0.1", peerPort, &storage))
-    {
-        usage(3, &peerPort);
-    }
-    server->peer_storage = storage;
-    int s = socket(storage.ss_family, SOCK_STREAM, 0);
-    if (s == -1)
-    {
-        logexit("socket");
-    }
-    struct sockaddr *addr = (struct sockaddr *)(&storage);
-    if (0 != connect(s, addr, sizeof(storage)))
-    {
-        printf("No peer found, starting to listen...\n");
-        server->peer_mode = PEER_MODE_USER_STORAGE;
-        server->server_sock = init_server(peerPort, &storage);
-        server->active_mode = 1;
-        return;
-    }
-    server->peer_sock = s;
-    struct response_t response = peer_request(server, REQ_CONNPEER, "");
-    if (response.action == ERROR)
-    {
-        printf("Error connecting to peer\n");
-        handle_error(response.payload);
-        return;
-    }
-    // Peer connected, using socket to communicate
-    sscanf(response.payload, "%d", &server->peer_id);
-    printf("New Peer ID: %d\n", server->peer_id);
-    server->peer_id = gen_peer_id();
-    printf("Peer %d connected\n", server->peer_id);
-    peer_response(s, RES_CONNPEER, integer_to_string(server->peer_id));
-    server->peer_mode = PEER_MODE_USER_LOCATIONS;
-    server->active_mode = 0;
-}
+// END Server utils
 
-void handle_peer_req(server_t *server, int peer_sock, char *clientInfo)
+// THREADS SECTIONS
+typedef struct
 {
-    int action;
-    char payload[BUFSZ];
-    sscanf(clientInfo, "%d %s", &action, payload);
+    server_t *server;
+    int sock;
+    int id;
+    void *handler;
+} connection_thread_t;
 
-    if (action == REQ_CONNPEER)
+void *thread_handler(void *arg)
+{
+    connection_thread_t *data = (connection_thread_t *)arg;
+    char buffer[BUFSZ];
+    while (1)
     {
-        // Request new socket to peer
-        if (server->peer_id != -1)
+        memset(buffer, 0, BUFSZ);
+        ssize_t received = recv(data->sock, buffer, BUFSZ - 1, 0);
+
+        if (received <= 0)
         {
-            return_response(peer_sock, ERROR, "01");
-            return;
+            close(data->sock);
+            free(data);
         }
-        // TODO asign socket instead of port
-        int peer_id = gen_peer_id();
-        server->peer_id = peer_id;
-        server->peer_sock = peer_sock;
-        printf("Peer %d connected\n", peer_id);
-        struct response_t response = peer_request(server, RES_CONNPEER, integer_to_string(peer_id));
-        server->server_id = atoi(response.payload);
-        printf("New Peer ID: %d\n", server->server_id);
-        return;
-    }
-    if (action == REQ_DISCPEER)
-    {
-        // Disconnect peer
-        printf("Disconnecting peer\n");
-        int peer_to_disconnect = atoi(payload);
-        if (server->peer_id != peer_to_disconnect)
-        {
-            return_response(peer_sock, ERROR, ERROR_PEER_NOT_FOUND);
-            return;
-        }
-        int peer_sock = server->peer_id;
-        server->peer_id = -1;
-        return_response(peer_sock, OK, SUCCESSFUL_DISCONNECTED);
-        printf("Peer %d disconnected\n", peer_sock);
-        return;
+        printf("%d\n", data->id);
+        ((void (*)(server_t *, int, char *, int))data->handler)(data->server, data->sock, buffer, data->id);
     }
 
-    return_response(peer_sock, ERROR, clientInfo);
-}
-
-user *NewUserFromPayload(char *payload)
-{
-    user *newUser;
-    newUser = malloc(sizeof(user));
-    sscanf(payload, "%s %d", newUser->id, &newUser->root);
-    return newUser;
-}
-
-user *find_user_by_id(server_t *server, char *id)
-{
-    for (int i = 0; i < server->user_count; i++)
-    {
-        if (strcmp(server->users[i]->id, id) == 0)
-        {
-            return server->users[i];
-        }
-    }
     return NULL;
 }
 
-struct response_t persist_user_location_in_location_peer(server_t *server, user *user, int loc_id)
-{
-    char payload[BUFSZ];
-    sprintf(payload, "%s %d", user->id, loc_id);
-    return peer_request(server, REQ_LOCREG, payload);
-}
 
-// Returns an array with user location and respective index in array
-int *find_user_location_and_index_in_sl(server_t *server, char *id)
-{
-    int *result = malloc(sizeof(int) * 2);
-    result[0] = NULL;
-    result[1] = NULL;
-    for (int i = 0; i < CLIENTS_LOCATIONS; i++)
+void * thread_accept_handler(void *arg){
+    connection_thread_t *data = (connection_thread_t *)arg;
+    char buffer[BUFSZ];
+    while (1)
     {
-        for (int j = 0; j < MAX_USERS; j++)
-        {
-            if (server->user_locations[i]->users[j] == NULL)
-            {
-                continue;
-            }
-            if (strcmp(server->user_locations[i]->users[j], id) == 0)
-            {
-                result[0] = i + 1;
-                result[1] = j;
-                return result;
-            }
-        }
-    }
-    // Checking users outside
-    for (int i = 0; i < MAX_USERS; i++)
-    {
-        if (server->users_outside[i] == NULL)
+        memset(buffer, 0, BUFSZ);
+        int client_sock = accept_conncetion(data->sock, buffer);
+        if (client_sock == -1)
         {
             continue;
         }
-        if (strcmp(server->users_outside[i], id) == 0)
-        {
-            result[0] = -1;
-            result[1] = i;
-            break;
-        }
+        ((void (*)(server_t *, int, char *, int))data->handler)(data->server, client_sock, buffer, data->id);
     }
-    return result;
+    return NULL;
 }
+void start_thread(server_t *server, int sock_to_listen, int id, void *thread_function, int accept)
+{
+    connection_thread_t *thread_data = malloc(sizeof(connection_thread_t));
+    thread_data->server = server;
+    thread_data->sock = sock_to_listen;
+    thread_data->id = id;
+    thread_data->handler = thread_function;
+    void* (*handler)(void*) = accept ? thread_accept_handler : thread_handler;
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, handler, thread_data) != 0)
+    {
+        fprintf(stderr, "Failed to create thread\n");
+        free(thread_data);
+        return;
+    }
+    pthread_detach(thread);
+}
+
 // Tratamento de requisições do SU
-void handle_peer_server_storage_req(server_t *server, char *rawPayload)
+void *handle_peer_server_storage_req(server_t *server, int peerSock, char *rawPayload, int id)
 {
 
     int action;
     char payload[BUFSZ];
     parse_response(rawPayload, &action, payload);
-    switch (action)
-    {
-    case REQ_USRAUTH:
+    if (action == REQ_USRAUTH)
     {
         printf("REQ_USRAUTH %s\n", payload);
         user *existingUser = find_user_by_id(server, payload);
@@ -319,63 +256,105 @@ void handle_peer_server_storage_req(server_t *server, char *rawPayload)
         peer_response(server->peer_sock, ERROR, ERROR_USER_NOT_FOUND);
         return;
     }
+    if (action == REQ_DISCPEER)
+    {
+        // Disconnect peer
+        printf("Disconnecting peer\n");
+        int peer_to_disconnect = atoi(payload);
+        if (server->peer_id != peer_to_disconnect)
+        {
+            return_response(peerSock, ERROR, ERROR_PEER_NOT_FOUND);
+            return;
+        }
+        int peer_sock = server->peer_id;
+        server->peer_id = -1;
+        return_response(peer_sock, OK, SUCCESSFUL_DISCONNECTED);
+        printf("Peer %d disconnected\n", peer_sock);
+        return;
     }
     peer_response(server->peer_sock, ERROR, "Invalid action");
 }
 
 // Tratamento de requisições do SL
-void handle_peer_server_location_req(server_t *server, char *rawPayload)
+void *handle_peer_server_location_req(server_t *server, int peerSock, char *rawPayload, int id)
 {
 
     int action;
     char payload[BUFSZ];
     parse_response(rawPayload, &action, payload);
-    switch (action)
-    {
-    case REQ_LOCREG:
+
+    if (action == REQ_LOCREG)
     {
         printf("REQ_LOCREG %s\n", payload);
         int loc_id;
         char *id = malloc(10);
         sscanf(payload, "%s %d", id, &loc_id);
-        int *oldLocation = malloc(sizeof(int) * 2);
-        oldLocation = find_user_location_and_index_in_sl(server, id);
+        int oldLocation = find_user_location_in_sl(server, id);
         char **newUserLocationArray = loc_id == -1 ? server->users_outside : server->user_locations[loc_id - 1]->users;
-        if (oldLocation[0] == NULL)
+        if (oldLocation == 0)
         {
             put_user_in_location(newUserLocationArray, id);
             peer_response(server->peer_sock, RES_LOCREG, "-1");
             return;
         }
-        char **oldUserLocationArray = oldLocation[0] == -1 ? server->users_outside : server->user_locations[oldLocation[0] - 1]->users;
+        char **oldUserLocationArray = oldLocation == -1 ? server->users_outside : server->user_locations[oldLocation - 1]->users;
         put_user_outside_location(oldUserLocationArray, id);
         put_user_in_location(newUserLocationArray, id);
-        peer_response(server->peer_sock, RES_LOCREG, integer_to_string(oldLocation[0]));
+        peer_response(server->peer_sock, RES_LOCREG, integer_to_string(oldLocation));
         free(oldLocation);
         return;
     }
+    if (action == REQ_DISCPEER)
+    {
+        // Disconnect peer
+        printf("Disconnecting peer\n");
+        int peer_to_disconnect = atoi(payload);
+        if (server->peer_id != peer_to_disconnect)
+        {
+            return_response(peerSock, ERROR, ERROR_PEER_NOT_FOUND);
+            return;
+        }
+        server->peer_id = -1;
+        return_response(peerSock, OK, SUCCESSFUL_DISCONNECTED);
+        printf("Peer %d disconnected\n", peerSock);
+        return;
     }
     peer_response(server->peer_sock, ERROR, "Invalid action");
 }
-
-void put_user_outside_location(char **users_locations, char *id)
+// Lidando com as requisições de conexão
+void *handle_peer_req(server_t *server, int peer_sock, char *clientInfo, int id)
 {
-    for (int i = 0; i < MAX_USERS; i++)
+    int action;
+    char payload[BUFSZ];
+    sscanf(clientInfo, "%d %s", &action, payload);
+
+    if (action == REQ_CONNPEER)
     {
-        if (users_locations[i] == NULL)
+        // Request new socket to peer
+        if (server->peer_id != -1)
         {
-            continue;
+            return_response(peer_sock, ERROR, "01");
         }
-        if (strcmp(users_locations[i], id) == 0)
+        else
         {
-            users_locations[i] = NULL;
-            return;
+            // TODO asign socket instead of port
+            int peer_id = gen_peer_id();
+            server->peer_id = peer_id;
+            server->peer_sock = peer_sock;
+            printf("Peer %d connected\n", peer_id);
+            struct response_t response = peer_request(server, RES_CONNPEER, integer_to_string(peer_id));
+            server->server_id = atoi(response.payload);
+            printf("New Peer ID: %d\n", server->server_id);
+            start_thread(server, peer_sock, peer_id, handle_peer_server_storage_req,0);
         }
     }
-    return;
+    else
+    {
+        return_response(peer_sock, ERROR, clientInfo);
+    }
 }
 
-void handle_client_storage_req(server_t *server, int client_sock, int action, char *payload, int client_id)
+void *handle_client_storage_req(server_t *server, int client_sock, int action, char *payload, int client_id)
 {
 
     if (action == REQ_USRADD)
@@ -410,7 +389,9 @@ void handle_client_storage_req(server_t *server, int client_sock, int action, ch
         if (existingUser != NULL)
         {
             int locId = strcmp(direction, "out") == 0 ? -1 : server->client_locations[client_id - 1];
-            struct response_t response = persist_user_location_in_location_peer(server, existingUser, locId);
+            char payload[BUFSZ];
+            sprintf(payload, "%s %d", id, locId);
+            struct response_t response = peer_request(server, REQ_LOCREG, payload);
             return_response(client_sock, RES_USRACCESS, response.payload);
             return;
         }
@@ -426,11 +407,59 @@ void handle_client_storage_req(server_t *server, int client_sock, int action, ch
     return_response(client_sock, ERROR, "Invalid action");
 }
 
-user *find_user_location_in_su_by_id(server_t *server, char *id)
+// END THREADS SECTIONS
+
+void init_peer_connection_and_setup_server_conf(char *peerPort, server_t *server)
 {
-    for (int i = 0; i < 10; i++)
+    struct sockaddr_storage storage;
+    if (0 != addrparse("127.0.0.1", peerPort, &storage))
     {
-        for (int j = 0; j < 30; j++)
+        usage(3, &peerPort);
+    }
+    server->peer_storage = storage;
+    int s = socket(storage.ss_family, SOCK_STREAM, 0);
+    if (s == -1)
+    {
+        logexit("socket");
+    }
+    struct sockaddr *addr = (struct sockaddr *)(&storage);
+    if (0 != connect(s, addr, sizeof(storage)))
+    {
+        printf("No peer found, starting to listen...\n");
+        server->peer_mode = PEER_MODE_USER_STORAGE;
+        server->server_sock = init_server(peerPort, &storage);
+        server->active_mode = 1;
+        start_thread(server, server->server_sock, 0, handle_peer_req,1);
+        return;
+    }
+    server->peer_sock = s;
+    struct response_t response = peer_request(server, REQ_CONNPEER, "");
+    if (response.action == ERROR)
+    {
+        printf("Error connecting to peer\n");
+        handle_error(response.payload);
+        return;
+    }
+    // Peer connected, using socket to communicate
+    sscanf(response.payload, "%d", &server->peer_id);
+    printf("New Peer ID: %d\n", server->peer_id);
+    server->peer_id = gen_peer_id();
+    printf("Peer %d connected\n", server->peer_id);
+    peer_response(s, RES_CONNPEER, integer_to_string(server->peer_id));
+    server->peer_mode = PEER_MODE_USER_LOCATIONS;
+    server->active_mode = 0;
+
+    // Inicia thread para tratar requisições de SL
+    start_thread(server, server->peer_sock, server->peer_id, handle_peer_server_location_req,0);
+}
+
+// Returns an array with user location and respective index in array
+//  Returns 0 if user is not found or -1 if user is outside or location_id if user is inside
+int find_user_location_in_sl(server_t *server, char *id)
+{
+    for (int i = 0; i < CLIENTS_LOCATIONS; i++)
+    {
+        for (int j = 0; j < MAX_USERS; j++)
         {
             if (server->user_locations[i]->users[j] == NULL)
             {
@@ -438,27 +467,25 @@ user *find_user_location_in_su_by_id(server_t *server, char *id)
             }
             if (strcmp(server->user_locations[i]->users[j], id) == 0)
             {
-                return server->user_locations[i]->users[j];
+                return i + 1;
             }
         }
     }
-    return NULL;
+    // Checking users outside
+    for (int i = 0; i < MAX_USERS; i++)
+    {
+        if (server->users_outside[i] == NULL)
+        {
+            continue;
+        }
+        if (strcmp(server->users_outside[i], id) == 0)
+        {
+            return -1;
+        }
+    }
+    return 0;
 }
 
-void disconnect_client(server_t *server, int client_sock, int client_id)
-{
-    printf("REQ_DISC\n");
-    if (server->client_locations[client_id - 1] == -1)
-    {
-        return_response(client_sock, ERROR, ERROR_CLIENT_NOT_FOUND);
-        return;
-    }
-    printf("Client %d removed (Loc %d)\n", client_id, server->client_locations[client_id - 1]);
-    server->client_locations[client_id - 1] = -1;
-    server->client_sockets[client_id - 1] = -1;
-    server->client_connections_count--;
-    return_response(client_sock, OK, SUCCESSFUL_DISCONNECTED);
-}
 void handle_client_location_req(server_t *server, int client_sock, int action, char *payload, int client_id)
 {
 
@@ -466,9 +493,8 @@ void handle_client_location_req(server_t *server, int client_sock, int action, c
     {
     case REQ_USRLOC:
         printf("REQ_USRLOC %s\n", payload);
-        int *oldLocation = find_user_location_and_index_in_sl(server, payload);
-        int loc_id = oldLocation[0];
-        if (loc_id != NULL)
+        int loc_id = find_user_location_in_sl(server, payload);
+        if (loc_id != 0)
         {
             return_response(client_sock, RES_USRLOC, integer_to_string(loc_id));
             return;
@@ -541,7 +567,7 @@ void handle_client_req(server_t *server, int client_sock, char *request, int cli
     }
 }
 
-void handle_inital_client_req(server_t *server, int client_sock, char *request)
+void handle_inital_client_req(server_t *server, int client_sock, char *request, int _)
 {
     int action;
     char payload[BUFSZ];
@@ -571,21 +597,7 @@ void handle_inital_client_req(server_t *server, int client_sock, char *request)
         server->client_sockets[client_id - 1] = client_sock;
         printf("Client %d added(Loc %d)\n", client_id, loc_id);
 
-        // Initialize thread data for client request
-        connection_thread_t *thread_data = malloc(sizeof(connection_thread_t));
-        thread_data->server = server;
-        thread_data->sock = client_sock;
-        thread_data->id = client_id;
-
-        pthread_t thread;
-        if (pthread_create(&thread, NULL, new_client_requests_handler_thread, thread_data) != 0)
-        {
-            fprintf(stderr, "Failed to create thread for client %d\n", client_id);
-            free(thread_data);
-            return_response(client_sock, ERROR, "Failed to create client handler thread");
-            return;
-        }
-        pthread_detach(thread);
+        start_thread(server, client_sock, client_id, handle_client_req,0);
 
         return_response(client_sock, RES_CONN, integer_to_string(client_id));
         return;
@@ -626,67 +638,24 @@ int main(int argc, char **argv)
         usage(argc, argv);
     }
     server_t *server = NewServer();
+    // Tentar conectar com o peer, se não, iniciar servidor na porta passada
     init_peer_connection_and_setup_server_conf(argv[1], server);
 
     struct sockaddr_storage client_storage;
     int client_socket = init_server(argv[2], &client_storage);
-
-    // Accept connections from peer and initial requests from clients
-    fd_set master_set, read_fds;
-    int peer_connection_socket = server->active_mode == 1 ? server->server_sock : server->peer_sock;
-    int fdmax = (peer_connection_socket > client_socket) ? peer_connection_socket : client_socket;
-
-    FD_ZERO(&master_set);
-    FD_SET(peer_connection_socket, &master_set);
-    FD_SET(client_socket, &master_set);
+    // Inicia thread para tratar requisições de abertura de conexão
+    start_thread(server, client_socket, 0, handle_inital_client_req,1);
     while (1)
     {
-        read_fds = master_set;
 
-        if (select(fdmax + 1, &read_fds, NULL, NULL, NULL) == -1)
-        {
-            logexit("select");
-        }
-        if (FD_ISSET(peer_connection_socket, &read_fds) && server->peer_mode == PEER_MODE_USER_STORAGE)
-        {
-            // Handle peer connection
-            char peer_buffer[BUFSZ];
-            int peerSock = accept_conncetion(server->server_sock, peer_buffer);
-            handle_peer_req(server, peerSock, peer_buffer);
-            if (server->peer_sock != -1)
-            {
-                FD_SET(server->peer_sock, &master_set);
-                fdmax = (server->peer_sock > fdmax) ? server->peer_sock : fdmax;
-            }
-        }
+        char buffer[BUFSZ];
+        memset(buffer, 0, BUFSZ);
+        scanf("%s", buffer);
 
-        if (FD_ISSET(client_socket, &read_fds))
+        if (strcmp(buffer, "kill") == 0)
         {
-            // Handle client connection
-            char client_request[BUFSZ];
-            int clientSock = accept_conncetion(client_socket, client_request);
-            handle_inital_client_req(server, clientSock, client_request);
-        }
-
-        if (FD_ISSET(server->peer_sock, &read_fds))
-        {
-            // Handle incoming data from peer
-            char buffer[BUFSZ];
-            ssize_t received = recv(server->peer_sock, buffer, BUFSZ - 1, 0);
-            if (received == 0)
-            {
-                // Connection closed by peer
-                close(server->peer_sock);
-                server->peer_sock = -1;
-            }
-            if (server->peer_mode == PEER_MODE_USER_LOCATIONS)
-            {
-                handle_peer_server_location_req(server, buffer);
-            }
-            else if (server->peer_mode == PEER_MODE_USER_STORAGE)
-            {
-                handle_peer_server_storage_req(server, buffer);
-            }
+            // TODO disconnect from peer
+            break;
         }
     }
 

@@ -28,7 +28,7 @@ void validate_loc_id_and_if_invalid_exit(int loc_id)
 	}
 }
 
-struct infraestructure_t *extract_infraestructure(int argc, char **argv)
+struct infraestructure_t *init_client_infraestructure_configuration(int argc, char **argv)
 {
 	struct infraestructure_t *infraestructure = malloc(sizeof(struct infraestructure_t));
 	if (argc != 5)
@@ -97,7 +97,7 @@ void disconnect_from_server(int server_sock, int client_id, char * mode)
 
 int main(int argc, char **argv)
 {
-	struct infraestructure_t *infraestructure = extract_infraestructure(argc, argv);
+	struct infraestructure_t *infraestructure = init_client_infraestructure_configuration(argc, argv);
 	// Connect to SU
 	connect_to_server_and_return_client_id(infraestructure, PEER_MODE_USER_STORAGE);
 	printf("SU New Id: %d\n", infraestructure->client_id_storage);
