@@ -651,7 +651,6 @@ int main(int argc, char **argv)
         char buffer[BUFSZ];
         memset(buffer, 0, BUFSZ);
         scanf("%s", buffer);
-
         if (strcmp(buffer, "kill") == 0)
         {
             // TODO disconnect from peer
